@@ -1,0 +1,98 @@
+Revision history for Perl extension Module::Build::Convert.
+
+0.21 Tue Nov  1 21:42:10 CET 2005
+ - Moved the package Make::Build::Convert to the namespace 
+   Module::Build to disambiguate its uses.
+
+0.20_07 Sun Oct 30 18:10:09 CET 2005
+ - To avoid that global scalars are "polluted" by running 
+   "do 'Makefile.PL'", they're copied by _save_globals() and 
+   restored by _restore_globals().
+
+0.20_05 Thu Oct 27 20:36:47 CEST 2005
+ - Polished some of the parsing code up to the extent that
+   it is able to recognize and process standalone comments properly.
+ - A trailing comment of a MakeMaker argument entry is appended
+   to the Module::Build equivalent for all type variants.
+ - Some unnecessary newlines are removed while composing
+   the header of a Build.PL. 
+
+0.20_04 Sun Oct 23 14:51:30 CEST 2005
+ - _compose_header() rearranges the placement of the shebang,
+   line, comments, use/require statements should they appear
+   within the Makefile.PL in order to fit in nicely with the 
+   default Build.PL code. The use/require ExtUtils::MakeMaker
+   statement will be removed as it becomes unneeded.
+
+0.20_03 2005/10/21
+ - Statically parsing the Makefile.PL as the method to
+   "receive" MakeMaker arguments, supersedes the previous 
+   known "do 'Makefile.PL'" evaluation.
+ - _parse_args() has been added that acts as de-facto 
+   replacement of _run_makefile() . Scalar, array and hash
+   arguments will be extracted by parsing the Makefile
+   string; code chunks are processed in a separate branch.
+ - A warning is emitted if WriteMakefile() takes indirect
+   arguments via a hash.
+
+0.20_02 2005/10/18
+ - The necessary subs to write and parse the contents of a 
+   RC-file have been added.
+ - Further MakeMaker arguments to be converted includes
+   the Module::Build equivalents: PL_files, pm_files, 
+   pod_files, xs_files, include_dirs, meta_add.
+ - Usage and version output in make2build is being embedded 
+   to subs.
+ - The unintentional space preceeding filenames in MANIFEST
+   issue has been resolved.
+
+0.20 2005/10/15
+ - Conversion from script to object-oriented module.
+
+0.19 2005/10/13
+ - The obligatory usage screen and according switches have 
+   been introduced.
+ - The verbosity output has been extended to mention the 
+   overriding of arguments and arguments that are classified 
+   as unknown to the user while conversion is in charge.
+ - sort_args() is able to distinguish whether the native
+   sorting order should be preserved or the default one
+   used instead.
+ - do_verbose() outputs based on verbosity levels.
+
+0.18_02 2005/10/12
+ - Test failures have been fixed.
+ - The code chunk that cleaned args of unneeded whitespace
+   has been replaced with a ?{} construct.
+ - Commas are added to enclosing brackets.
+
+0.18 2005/09/28
+ - The conversion & interpretation of arguments which 
+   specify temporary files for removement has been implemented. 
+   [ Nathan Gray <kolibrie@graystudios.org> ]
+ - Array argument conversion has been integrated with included
+   string to elements conversion, when necessary. 
+
+0.17 2005/03/07
+ - Added recommends, build_requires, conflicts, pm_files,
+   extra_compiler_flags, sign, dist_abstract, dist_author
+   to conversion table.
+
+0.16 2005/03/06
+ - A notice is placed in the created Build.PL, indicating
+   that it was created by make2build.
+
+0.12 2004/02/23
+ - ExtUtils::MakeMaker arguments DISTNAME, VERSION, VERSION_FROM, 
+   are converted and output sorted.
+ - Default value of the license argument has been replaced 
+   with 'unknown'.
+
+0.11 2004/02/22
+ - Documentation has been largely extended.
+
+0.07 2004/02/19
+ - Redundant, unneeded code removed.
+
+0.01 2004/02/09
+ - Initial version.
