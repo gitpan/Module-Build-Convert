@@ -1,5 +1,9 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.21_01 Thu Nov  3 21:54:29 CET 2005
+ - Made _compose_header() more consistent in adding newlines
+   in an adequate manner.
+
 0.21 Tue Nov  1 21:42:10 CET 2005
  - Moved the package Make::Build::Convert to the namespace 
    Module::Build to disambiguate its uses.

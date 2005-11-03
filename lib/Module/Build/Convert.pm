@@ -13,7 +13,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.21';
+our $VERSION = '0.21_01';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -193,7 +193,7 @@ sub _parse_makefile {
     my $makecode_end   = $3;
     $makecode_begin =~ s/\s*([#\w]+.*;)\s*/$1/s;
     $makecode_end   =~ s/\s*([#\w]+.*;)\s*/$1/s;
-    $self->{make_code}{begin} = $makecode_begin unless (($makecode_begin =~ tr/;/;/) == 1);
+    $self->{make_code}{begin} = $makecode_begin;
     $self->{make_code}{end}   = $makecode_end;
     $self->_debug("Entering parse\n");
     while ($makefile) {
@@ -454,9 +454,9 @@ sub _compose_header {
     }
     $self->{Data}{begin} = $insert_comments || $insert_statements
       ? ($insert_comments  =~ /\w/ ? "$insert_comments\n" : '') . "$note\n" . 
-        ($insert_statements =~ /\w/ ? "\n$insert_statements\n" : '') .
+        ($insert_statements =~ /\w/ ? "\n$insert_statements\n\n" : "\n") .
         $self->{Data}{begin}
-      : "$note\n" . $self->{Data}{begin};
+      : "$note\n\n" . $self->{Data}{begin};
 }
 
 sub _write_begin {
