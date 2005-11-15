@@ -5,8 +5,6 @@ use Module::Build;
 my $build = Module::Build->new
   (
    module_name => 'Module::Build::Convert',
-   dist_author => 'Steven Schubiger <schubiger@cpan.org>',
-   dist_version_from => 'lib/Module/Build/Convert.pm',
    requires => { 
                  'Carp' => 0,
                  'Cwd' => 0, 
@@ -19,11 +17,11 @@ my $build = Module::Build->new
 		 'Getopt::Long' => 0,
 		 'IO::File' => 0,
                },
-   build_requires => { 
-                       'Test::More' => 0,
-                       'Test::Pod' => '1.14',
-		       'Test::Pod::Coverage' => '1.04',
-		     },
+   build_requires => { 'Test::More' => 0 },	       
+   recommends => {
+                   'Test::Pod' => '1.14',
+		   'Test::Pod::Coverage' => '1.04',
+		 },
    script_files => [ 'scripts/make2build' ],
    license => 'perl',
    create_readme => 1,

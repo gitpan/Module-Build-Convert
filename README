@@ -107,8 +107,8 @@ DATA SECTION
     "Module::Build" default arguments may be specified as key/value pairs.
     Arguments attached to multidimensional structures are unsupported.
 
-     recommends            HASH
      build_requires        HASH
+     recommends            HASH
      conflicts             HASH
      license               unknown
      create_readme         1
@@ -128,8 +128,8 @@ DATA SECTION
      dist_version
      dist_version_from
      requires
-     recommends
      build_requires
+     recommends
      conflicts
      PL_files
      pm_files

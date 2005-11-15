@@ -1,5 +1,13 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.21_02 Tue Nov 15 12:29:09 CET 2005
+ - ExtUtils::MakeMaker arguments 'DISTNAME', 'ABSTRACT', 'AUTHOR', 
+   'VERSION' and 'VERSION_FROM' are excluded from default conversion 
+   as the Module::Build argument 'module_name' doesn't require 
+   their Module::Build equivalents per se.
+ - Likewise the disabling for 'build_requires', 'recommends' and 
+   'conflicts' which are default arguments.
+
 0.21_01 Thu Nov  3 21:54:29 CET 2005
  - Made _compose_header() more consistent in adding newlines
    in an adequate manner.
