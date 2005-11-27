@@ -78,7 +78,7 @@ make2build - frontend to Module::Build::Convert
 
 =head1 AUTHOR
 
-Steven Schubiger, schubiger@cpan.org
+Steven Schubiger <schubiger@cpan.org>
 
 =head1 LICENSE
 

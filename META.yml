@@ -1,8 +1,8 @@
 ---
 name: Module-Build-Convert
-version: 0.21_02
+version: 0.22
 author:
-  - 'Steven Schubiger, schubiger@cpan.org'
+  - Steven Schubiger <schubiger@cpan.org>
 abstract: Makefile.PL to Build.PL converter
 license: perl
 resources:
@@ -26,5 +26,5 @@ build_requires:
 provides:
   Module::Build::Convert:
     file: lib/Module/Build/Convert.pm
-    version: 0.21_02
+    version: 0.22
 generated_by: Module::Build version 0.2703

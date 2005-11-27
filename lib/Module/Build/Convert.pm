@@ -13,7 +13,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.21_02';
+our $VERSION = '0.22';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -46,10 +46,10 @@ sub convert {
     my $self = shift;
     $self->_create_rcfile if $self->{Config}{Create_RC};
     $self->_makefile_ok;
-    print "Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n";
+    $self->_do_verbose("Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
     $self->_get_data;
     if ($self->{Config}{Exec_Makefile}) {
-        print "Executing $self->{Config}{Makefile_PL}\n";
+        $self->_do_verbose("Executing $self->{Config}{Makefile_PL}\n");
         $self->_run_makefile;
     } else {
         $self->_parse_makefile;
@@ -171,7 +171,7 @@ sub _parse_data {
     unless ($create_rc) {
         # superfluosity
         shift @data_parsed;
-        chomp($data_parsed[-1]);
+	chomp($data_parsed[-1]);
 	for my $line (split /\n/, $data_parsed[0]) {
 	    next unless $line;
 	    if ($line =~ /^#/) {
@@ -187,59 +187,57 @@ sub _parse_data {
 sub _parse_makefile {
     my $self = shift;
     my (@histargs, %makeargs);
-    my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
-    $makefile =~ s/(.*)WriteMakefile\(\s*?(.*?)\);(.*)/$2/s;
-    my $makecode_begin = $1;
-    my $makecode_end   = $3;
-    $makecode_begin =~ s/\s*([#\w]+.*;)\s*/$1/s;
-    $makecode_end   =~ s/\s*([#\w]+.*;)\s*/$1/s;
+    my ($makefile, $makecode_begin, $makecode_end) = $self->_read_makefile;
     $self->{make_code}{begin} = $makecode_begin;
     $self->{make_code}{end}   = $makecode_end;
     $self->_debug("Entering parse\n");
     while ($makefile) {
-        if ($makefile =~ s/^\s*['"]?(\w+)['"]?\s+=>\s+(?![\[\{])['"]?([-\$\w]?.*?)['"]?(?:,\n|,(\s+#\s+\w+.*?)\n)//) {
+        if ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*['"]?([\$\@\%\\\-\w]+.*?)['"]?(?:,?\n|,?(\s+#\s+\w+.*?)\n)//) {
 	    my ($arg, $value, $comment) = ($1,$2,$3);
 	    $comment ||= '';
+	    $value =~ tr/['"]//d;
             $makeargs{$arg} = $value;
 	    push @histargs, $arg;
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found scalar:\narg: $arg\nvalue: $value\ncomment: $comment\nmake args:\n$makefile\n\n");
-	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s+=>\s+\[\s*(.*?)\s*\](?:,\n|,(\s+#\s+\w+.*?)\n)//s) {
+	    $self->_debug("Found scalar\narg: $arg\nvalue: $value\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\[\s*(.*?)\s*\](?:,?\n|,?(\s+#\s+\w+.*?)\n)//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
-	    $values =~ tr/[',]//d;
-	    $makeargs{$arg} = [ split /\s+/, $values ];
+	    $makeargs{$arg} = [ map { tr/['",]//d; $_ } split /,\s*/, $values ];
 	    push @histargs, $arg;
 	    if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found array:\narg: $arg\nvalues: $values\ncomment: $comment\nmake args:\n$makefile\n\n");
-	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s+=>\s+\{\s*(.*?)\s*\}(?:,\n|,(\s+#\s+\w+.*?)\n)//s) {
+	    $self->_debug("Found array\narg: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\{\s*(.*?)\s*\}(?:,?\n|,?(\s+#\s+\w+.*?)\n)//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
-	    my @values = split /,\ /, $values;
-	    local $/ = ','; 
-	    chomp(@values);
-	    my @values_new;
+	    my @values = split /,\s*/, $values;
+	    my @values_clean;
 	    for my $value (@values) {
-	        my @values = split /\s+=>\s+/, $value;
-		push @values_new, @values;
+		push @values_clean, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
 	    }
-	    @values = map { tr/'//d; $_ } @values_new;
+	    @values = @values_clean;
 	    $makeargs{$arg} = { @values };
 	    push @histargs, $arg;
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found hash:\narg: $arg\nvalues: $values\ncomment: $comment\nmake args:\n$makefile\n\n");
+	    $self->_debug("Found hash\narg: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
 	} else {
 	    my $makecode;
+	    # ? : statements
 	    if ($makefile =~ s/^\s+(.*?\:\s+\(.*\)\s*),\n//s) {
 		$makecode = $1;
-	    } elsif ($makefile =~ s/^\s*([$@%]\w+)\s*//) {
+	    # heredocs
+            } elsif ($makefile =~ s/^\s*(['"]?\w+['"]?\s*=>\s*<<['"]?(.*?)['"]?,.*\2)//s) {
                 $makecode = $1;
+	    # variables
+	    } elsif ($makefile =~ s/^\s*([\Q$@%\E]\w+)\s*//) {
+                $makecode = $1;
+	    # commented	
             } elsif ($makefile =~ s/^\s*(#.*?)\n//) {
 	        $makecode = $1;
 	    } else {
@@ -254,11 +252,22 @@ sub _parse_makefile {
             }
 	    pop @histargs until $self->{Data}{table}{$histargs[-1]};
 	    push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
-	    $self->_debug("Found code:\ncode: $makecode\nmake args:\n$makefile\n\n");
+	    $self->_debug("Found code\ncode: $makecode\nremaining args:\n$makefile\n\n");
 	}
     }
     $self->_debug("Leaving parse\n");
     %{$self->{make_args}} = %makeargs;
+}
+
+sub _read_makefile {
+    my $self = shift;
+    my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
+    $makefile =~ s/(.*)\&?WriteMakefile\(\s*?(.*?)\);(.*)/$2/s;
+    my $makecode_begin = $1;
+    my $makecode_end   = $3;
+    $makecode_begin =~ s/\s*([#\w]+.*)\s*/$1/s;
+    $makecode_end   =~ s/\s*([#\w]+.*)\s*/$1/s;
+    return ($makefile, $makecode_begin, $makecode_end);
 }
 
 sub _convert {
@@ -428,7 +437,7 @@ sub _write {
     $self->_write_end;
     $fh->close;
     select($selold);
-    print "Conversion done\n";
+    $self->_do_verbose("Conversion done\n");
 }
 
 sub _compose_header {
@@ -555,7 +564,7 @@ sub _add_to_manifest {
 	  or die "Can't open $self->{Config}{MANIFEST}: $!\n";
         print $fh sort @manifest;
         $fh->close;
-	print "Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n";
+	$self->_do_verbose("Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
     }
 }
 
@@ -579,11 +588,11 @@ __DATA__
 # argument conversion 
 -
 NAME                  module_name
-#DISTNAME             dist_name
-#ABSTRACT             dist_abstract
-#AUTHOR               dist_author
-#VERSION              dist_version
-#VERSION_FROM         dist_version_from
+DISTNAME              dist_name
+ABSTRACT              dist_abstract
+AUTHOR                dist_author
+VERSION               dist_version
+VERSION_FROM          dist_version_from
 PREREQ_PM             requires
 PL_FILES              PL_files
 PM                    pm_files
@@ -597,7 +606,7 @@ EXTRA_META            meta_add
 SIGN                  sign
 LICENSE               license
 clean.FILES           @add_to_cleanup
- 
+
 # default arguments 
 -
 #build_requires       HASH
@@ -606,7 +615,7 @@ clean.FILES           @add_to_cleanup
 license               unknown
 create_readme         1
 create_makefile_pl    passthrough
- 
+
 # sorting order 
 -
 module_name
@@ -682,13 +691,13 @@ intended to ease the transition process.
 
 =head2 new
 
-Possible arguments:
+Options:
 
 =over 4
 
 =item Path
 
-Path to a Perl distribution. Default: undef
+Path to a Perl distribution. Default: C<''>
 
 =item Makefile_PL
 
@@ -713,7 +722,7 @@ Default: 0
 
 =item Exec_Makefile
 
-Execute the Makefile.PL via do 'Makefile.PL'.
+Execute the Makefile.PL via C<'do Makefile.PL'>.
 Default: 0
 
 =item Verbose
@@ -754,7 +763,7 @@ C<Data::Dumper> sort keys. Default: 1
 
 =head2 convert
 
-Parses the F<Makefile.PL>'s C<ExtUtils::MakeMaker> arguments and converts them
+Parses the F<Makefile.PL>'s C<WriteMakefile()> arguments and converts them
 to C<Module::Build> equivalents; subsequently the according F<Build.PL>
 is created. Takes no arguments.
 
@@ -791,9 +800,9 @@ that is, C<HASH> -> C<HASH>, etc.
 C<Module::Build> default arguments may be specified as key/value pairs. 
 Arguments attached to multidimensional structures are unsupported.
 
- build_requires        HASH
- recommends	       HASH
- conflicts	       HASH
+ #build_requires       HASH
+ #recommends	       HASH
+ #conflicts	       HASH
  license               unknown
  create_readme         1
  create_makefile_pl    passthrough
@@ -869,6 +878,16 @@ arguments are then accessible to the internal sub.
 Converted C<ExtUtils::MakeMaker> arguments will be dumped by 
 C<Data::Dumper's> C<Dump()> and are then furtherly processed.
 
+=head1 BUGS & CAVEATS
+
+C<Module::Build::Convert> should be considered experimental as the parsing 
+of the Makefile.PL doesn't necessarily return valid arguments, especially for
+Makefiles with bad or even worse, missing intendation.
+
+The parsing process may sometimes hang with or without warnings in such cases.
+Debugging by using the appropriate option/switch (see CONSTRUCTOR/new) may reveal
+the root cause.
+
 =head1 SEE ALSO
 
 L<http://www.makemaker.org>, L<ExtUtils::MakeMaker>, L<Module::Build>, 
@@ -876,7 +895,7 @@ L<http://www.makemaker.org/wiki/index.cgi?ModuleBuildConversionGuide>
 
 =head1 AUTHOR
 
-Steven Schubiger, schubiger@cpan.org
+Steven Schubiger <schubiger@cpan.org>
 
 =head1 LICENSE
 

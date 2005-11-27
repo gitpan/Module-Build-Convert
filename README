@@ -23,10 +23,10 @@ DESCRIPTION
 
 CONSTRUCTOR
   new
-    Possible arguments:
+    Options:
 
     Path
-        Path to a Perl distribution. Default: undef
+        Path to a Perl distribution. Default: ''
 
     Makefile_PL
         Filename of the Makefile script. Default: Makefile.PL
@@ -43,7 +43,7 @@ CONSTRUCTOR
         Create a RC file in the homedir of the current user. Default: 0
 
     Exec_Makefile
-        Execute the Makefile.PL via do 'Makefile.PL'. Default: 0
+        Execute the Makefile.PL via 'do Makefile.PL'. Default: 0
 
     Verbose
         Verbose mode. If set to 1, overridden defaults and skipped arguments
@@ -73,9 +73,9 @@ CONSTRUCTOR
 
 METHODS
   convert
-    Parses the Makefile.PL's "ExtUtils::MakeMaker" arguments and converts
-    them to "Module::Build" equivalents; subsequently the according Build.PL
-    is created. Takes no arguments.
+    Parses the Makefile.PL's "WriteMakefile()" arguments and converts them
+    to "Module::Build" equivalents; subsequently the according Build.PL is
+    created. Takes no arguments.
 
 DATA SECTION
   Argument conversion
@@ -107,9 +107,9 @@ DATA SECTION
     "Module::Build" default arguments may be specified as key/value pairs.
     Arguments attached to multidimensional structures are unsupported.
 
-     build_requires        HASH
-     recommends            HASH
-     conflicts             HASH
+     #build_requires       HASH
+     #recommends           HASH
+     #conflicts            HASH
      license               unknown
      create_readme         1
      create_makefile_pl    passthrough
@@ -179,12 +179,21 @@ INTERNALS
     Converted "ExtUtils::MakeMaker" arguments will be dumped by
     "Data::Dumper's" "Dump()" and are then furtherly processed.
 
+BUGS & CAVEATS
+    "Module::Build::Convert" should be considered experimental as the
+    parsing of the Makefile.PL doesn't necessarily return valid arguments,
+    especially for Makefiles with bad or even worse, missing intendation.
+
+    The parsing process may sometimes hang with or without warnings in such
+    cases. Debugging by using the appropriate option/switch (see
+    CONSTRUCTOR/new) may reveal the root cause.
+
 SEE ALSO
     <http://www.makemaker.org>, ExtUtils::MakeMaker, Module::Build,
     <http://www.makemaker.org/wiki/index.cgi?ModuleBuildConversionGuide>
 
 AUTHOR
-    Steven Schubiger, schubiger@cpan.org
+    Steven Schubiger <schubiger@cpan.org>
 
 LICENSE
     This program is free software; you may redistribute it and/or modify it
