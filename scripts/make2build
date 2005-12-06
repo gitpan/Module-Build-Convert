@@ -12,6 +12,7 @@ sub parse_switches {
     use Getopt::Long qw(:config no_ignore_case);
     my %opts;
     GetOptions(\%opts,'d','h','l=i','n','rc','v','vv','V','x') or usage();
+    # debugging happens while parsing takes place
     if ($opts{d} && $opts{x}) {
         print "Can't debug while in executing Makefile.PL mode\n";
 	usage();
@@ -47,7 +48,7 @@ USAGE
 }
 
 sub version {
-    my ($name) = ($0 =~ /.*\/(.*)\..*/o) || 'make2build';
+    my ($name) = ($0 =~ /.*\/(.*)\..*/) || 'make2build';
     print "  $name $Module::Build::Convert::VERSION\n";
     exit;
 }

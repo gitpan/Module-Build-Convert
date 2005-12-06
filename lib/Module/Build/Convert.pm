@@ -1,5 +1,7 @@
 package Module::Build::Convert;
 
+require 5.005;
+
 use strict;
 use warnings; 
 
@@ -13,7 +15,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -113,7 +115,7 @@ sub _save_globals {
         push @vars, $1 if defined(${$1});
     }
     no strict 'refs';
-    for my $var (@vars) {
+    foreach my $var (@vars) {
         ${__PACKAGE__.'::globals'}{$var} = ${$var};
     }
 }
@@ -124,7 +126,7 @@ sub _restore_globals {
     while (my ($var, $value) = each %{__PACKAGE__.'::globals'}) {
         ${__PACKAGE__.'::'.$var} = $value;
     }
-}    
+}
 
 sub _get_data {
     my $self = shift;
@@ -172,7 +174,7 @@ sub _parse_data {
         # superfluosity
         shift @data_parsed;
 	chomp($data_parsed[-1]);
-	for my $line (split /\n/, $data_parsed[0]) {
+	foreach my $line (split /\n/, $data_parsed[0]) {
 	    next unless $line;
 	    if ($line =~ /^#/) {
 	        my ($arg) = split /\s+/, $line;
@@ -216,7 +218,7 @@ sub _parse_makefile {
 	    $comment ||= '';
 	    my @values = split /,\s*/, $values;
 	    my @values_clean;
-	    for my $value (@values) {
+	    foreach my $value (@values) {
 		push @values_clean, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
 	    }
 	    @values = @values_clean;
@@ -244,7 +246,7 @@ sub _parse_makefile {
                 $makefile =~ s/^\s+(.*?)[,]\s*//;
                 $makecode = $1;
             }
-	    SUBST: for my $make (keys %{$self->{Data}{table}}) {
+	    SUBST: foreach my $make (keys %{$self->{Data}{table}}) {
 		if ($makecode =~ /\b$make\b/s) {
 		    $makecode =~ s/$make/$self->{Data}{table}{$make}/;
 		    last SUBST;
@@ -273,7 +275,7 @@ sub _read_makefile {
 sub _convert {
     my $self = shift;                        
     $self->_insert_args; 
-    for my $arg (keys %{$self->{make_args}}) {
+    foreach my $arg (keys %{$self->{make_args}}) {
         if ($self->{disabled}{$arg}) {
 	    $self->_do_verbose("*** $arg disabled, skipping\n");
 	    next;
@@ -373,7 +375,7 @@ sub _sort_args {
 	my $i = 0;
 	if ($self->{Config}{Use_Native_Order}) {
 	    my %slot;
-	    for my $arg (grep $have_args{$_}, @{$self->{Data}{sort_order}}) {
+	    foreach my $arg (grep $have_args{$_}, @{$self->{Data}{sort_order}}) {
 	        if ($native_sortorder{$arg}) {
 	            $sortorder{$arg} = $native_sortorder{$arg};
 		    $slot{$native_sortorder{$arg}} = 1;
@@ -482,7 +484,7 @@ sub _write_args {
     my $self = shift;
     my $arg;
     my $regex = '$chunk =~ /=> \{/';
-    for my $chunk (@{$self->{buildargs_dumped}}) {
+    foreach my $chunk (@{$self->{buildargs_dumped}}) {
         # Hash/Array output                       
         if ($chunk =~ /=> [\{\[]/) {
 	    # Remove redundant parentheses
@@ -496,7 +498,7 @@ sub _write_args {
 	    my ($whitespace) = $lines[0] =~ /^(\s+)(\w+)/;
 	    $arg = $2;
 	    my $shorten = length($whitespace);
-            for (my $i = 0; $i < @lines; $i++) {
+            foreach (my $i = 0; $i < @lines; $i++) {
 	        my $line = $lines[$i];
 	        chomp($line);
 		# Remove additional whitespace
@@ -525,7 +527,7 @@ sub _write_args {
 	}
 	no warnings 'uninitialized';
 	if ($self->{make_code}{$arg}) {
-	    for my $line (@{$self->{make_code}{$arg}}) {
+	    foreach my $line (@{$self->{make_code}{$arg}}) {
 	        $line .= ',' unless $line =~ /^#/;
     	        $self->_do_verbose("$self->{INDENT}$line\n", 2);
 	        print "$self->{INDENT}$line\n";
