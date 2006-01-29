@@ -1,5 +1,19 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.24 Sun Jan 29 21:49:32 CET 2006
+
+ - If parsing the Makefile.PL doesn't succeed entirely and
+   the 'process' starts looping endlessly, the "execute the 
+   Makefile.PL" mode - available via commandline switch or 
+   parameter to new() - will be activated by setting the according 
+   $self->{Config}{} flag and jumping back to convert() will run
+   the complete converting procedure again.
+ 
+ - _compose_header() adds the use (strict|warnings);
+   pragmas, which are defined hardcoded for now, to the top of
+   the Build.PL written after having ensured that no previous 
+   occurences of these pragmas could be found in the Makefile.PL.
+
 0.22 Tue Nov 15 12:29:09 CET 2005
 
  - The default arguments 'build_requires', 'recommends' and 
@@ -8,8 +22,8 @@ Revision history for Perl extension Module::Build::Convert.
 
 0.21_01 Thu Nov 3 21:54:29 CET 2005
 
- - Made _compose_header() more consistent in adding newlines
-   in an adequate manner.
+ - _compose_header() has been made more consistent in adding 
+   newlines in an adequate manner to the header composed.
 
 0.21 Tue Nov 1 21:42:10 CET 2005
 
@@ -20,7 +34,7 @@ Revision history for Perl extension Module::Build::Convert.
 
  - To avoid that global scalars are "polluted" by running 
    "do 'Makefile.PL'", they're copied by _save_globals() and 
-   restored by _restore_globals().
+   restored through _restore_globals().
 
 0.20_05 Thu Oct 27 20:36:47 CEST 2005
 

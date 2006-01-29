@@ -1,7 +1,6 @@
 package Module::Build::Convert;
 
-require 5.005;
-
+use 5.005;
 use strict;
 use warnings; 
 
@@ -15,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -46,16 +45,12 @@ sub new {
 
 sub convert {
     my $self = shift;
-    $self->_create_rcfile if $self->{Config}{Create_RC};
-    $self->_makefile_ok;
-    $self->_do_verbose("Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
-    $self->_get_data;
-    if ($self->{Config}{Exec_Makefile}) {
-        $self->_do_verbose("Executing $self->{Config}{Makefile_PL}\n");
-        $self->_run_makefile;
-    } else {
-        $self->_parse_makefile;
+    if (!$self->{Config}{reloaded}) {
+        $self->_create_rcfile if $self->{Config}{Create_RC};
+        $self->_makefile_ok;
+        $self->_get_data;
     }
+    $self->_extract_args;
     $self->_convert;
     $self->_dump;
     $self->_write;
@@ -90,42 +85,10 @@ sub _makefile_ok {
     }
     die "$self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n"
       unless $makefile =~ /WriteMakefile\s*\(/s;
-    die "Indirect arguments to WriteMakefile() via hash are not supported\n" 
-      if $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile};
-}
-
-sub _run_makefile {
-    my $self = shift;
-    no warnings 'redefine';
-    *ExtUtils::MakeMaker::WriteMakefile = sub {
-      %{$self->{make_args}} = @{$self->{make_args_arr}} = @_;
-    };
-    # beware, do '' overwrites existing globals
-    $self->_save_globals;
-    do $self->{Config}{Makefile_PL};
-    $self->_restore_globals;
-}
-
-sub _save_globals {
-    my $self = shift;
-    my @vars;
-    my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
-    $makefile =~ s/.*WriteMakefile\(\s*?(.*?)\);.*/$1/s;
-    while ($makefile =~ s/\$(\w+)//) {
-        push @vars, $1 if defined(${$1});
-    }
-    no strict 'refs';
-    foreach my $var (@vars) {
-        ${__PACKAGE__.'::globals'}{$var} = ${$var};
-    }
-}
-
-sub _restore_globals {
-    my $self = shift;
-    no strict 'refs';
-    while (my ($var, $value) = each %{__PACKAGE__.'::globals'}) {
-        ${__PACKAGE__.'::'.$var} = $value;
-    }
+    $self->_do_verbose("Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
+    warn "Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n" 
+      and $self->{Config}{Exec_Makefile} = 1
+          if $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile};
 }
 
 sub _get_data {
@@ -186,15 +149,60 @@ sub _parse_data {
     return $create_rc ? $data : @data_parsed;
 }
 
+sub _extract_args {
+    my $self = shift;
+    if ($self->{Config}{Exec_Makefile}) {
+        $self->_do_verbose("Executing $self->{Config}{Makefile_PL}\n");
+        $self->_run_makefile;
+    } else {
+        $self->_parse_makefile;
+    }
+}
+
+sub _run_makefile {
+    my $self = shift;
+    no warnings 'redefine';
+    *ExtUtils::MakeMaker::WriteMakefile = sub {
+      %{$self->{make_args}} = @{$self->{make_args_arr}} = @_;
+    };
+    # beware, do '' overwrites existing globals
+    $self->_save_globals;
+    do $self->{Config}{Makefile_PL};
+    $self->_restore_globals;
+}
+
+sub _save_globals {
+    my $self = shift;
+    my @vars;
+    my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
+    $makefile =~ s/.*WriteMakefile\(\s*?(.*?)\);.*/$1/s;
+    while ($makefile =~ s/\$(\w+)//) {
+        push @vars, $1 if defined(${$1});
+    }
+    no strict 'refs';
+    foreach my $var (@vars) {
+        ${__PACKAGE__.'::globals'}{$var} = ${$var};
+    }
+}
+
+sub _restore_globals {
+    my $self = shift;
+    no strict 'refs';
+    while (my ($var, $value) = each %{__PACKAGE__.'::globals'}) {
+        ${__PACKAGE__.'::'.$var} = $value;
+    }
+    undef %{__PACKAGE__.'::globals'};
+}
+
 sub _parse_makefile {
     my $self = shift;
-    my (@histargs, %makeargs);
+    my (@histargs, %makeargs, %trapped_loop);
     my ($makefile, $makecode_begin, $makecode_end) = $self->_read_makefile;
     $self->{make_code}{begin} = $makecode_begin;
     $self->{make_code}{end}   = $makecode_end;
     $self->_debug("Entering parse\n");
     while ($makefile) {
-        if ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*['"]?([\$\@\%\\\-\w]+.*?)['"]?(?:,?\n|,?(\s+#\s+\w+.*?)\n)//) {
+        if ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*['"]?([\$\@\%\\\/\-\:\.\w]+.*?)['"]?(?:,?\n?|,?(\s+#\s+\w+.*?)\n)//) {
 	    my ($arg, $value, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $value =~ tr/['"]//d;
@@ -203,7 +211,7 @@ sub _parse_makefile {
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found scalar\narg: $arg\nvalue: $value\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	    $self->_debug("Found string\narg: $arg\nvalue: $value\ncomment: $comment\nremaining args:\n$makefile\n\n");
 	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\[\s*(.*?)\s*\](?:,?\n|,?(\s+#\s+\w+.*?)\n)//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
@@ -213,7 +221,7 @@ sub _parse_makefile {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
 	    $self->_debug("Found array\narg: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
-	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\{\s*(.*?)\s*\}(?:,?\n|,?(\s+#\s+\w+.*?)\n)//s) {
+	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\{\s*(.*?)\s*?\}(?:,?\n?|,?(\s+#\s+\w+.*?)\n)//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    my @values = split /,\s*/, $values;
@@ -227,25 +235,34 @@ sub _parse_makefile {
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found hash\narg: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	    $self->_debug("Found hash\nkey: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
 	} else {
-	    my $makecode;
-	    # ? : statements
-	    if ($makefile =~ s/^\s+(.*?\:\s+\(.*\)\s*),\n//s) {
-		$makecode = $1;
-	    # heredocs
-            } elsif ($makefile =~ s/^\s*(['"]?\w+['"]?\s*=>\s*<<['"]?(.*?)['"]?,.*\2)//s) {
-                $makecode = $1;
-	    # variables
-	    } elsif ($makefile =~ s/^\s*([\Q$@%\E]\w+)\s*//) {
-                $makecode = $1;
-	    # commented	
-            } elsif ($makefile =~ s/^\s*(#.*?)\n//) {
+	    my ($debug_desc, $makecode);
+	    if ($makefile =~ s/^\s*(#.*)\n//s) {
+	        $debug_desc = 'comment';
 	        $makecode = $1;
-	    } else {
-                $makefile =~ s/^\s+(.*?)[,]\s*//;
+	    } elsif ($makefile =~ s/^\s*(['"]?\w+['"]?\s*=>\s*<<['"]?(.*?)['"]?,.*\2)//s) {
+	        $debug_desc = 'here-doc';
+                $makecode = $1;
+	    } elsif ($makefile =~ s/^\s*(\(?.*\?.*\:(.*?\),|.*['"],))\s*//s) {
+	        $debug_desc = 'ternary operator';
+		$makecode = $1;
+            } elsif ($makefile =~ s/^\s*([\Q$@%\E]\w+)\s*//) {
+	        $debug_desc = 'variable';
+                $makecode = $1;
+            } else {
+                $makefile =~ s/^\s*(.*?)\s*//;
+		$debug_desc = 'unknown';
                 $makecode = $1;
             }
+	    $trapped_loop{$makecode}++;
+	    if ($trapped_loop{$makecode} >= 2) {
+	        $self->{Config}{Exec_Makefile} = 1;
+	        $self->{Config}{reloaded} = 1;
+	    	$self->convert;
+	    	exit;
+	    }
+	    $self->_debug("Found code\n$debug_desc: $makecode\nremaining args:\n$makefile\n\n");
 	    SUBST: foreach my $make (keys %{$self->{Data}{table}}) {
 		if ($makecode =~ /\b$make\b/s) {
 		    $makecode =~ s/$make/$self->{Data}{table}{$make}/;
@@ -254,17 +271,18 @@ sub _parse_makefile {
             }
 	    pop @histargs until $self->{Data}{table}{$histargs[-1]};
 	    push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
-	    $self->_debug("Found code\ncode: $makecode\nremaining args:\n$makefile\n\n");
 	}
     }
     $self->_debug("Leaving parse\n");
     %{$self->{make_args}} = %makeargs;
 }
 
+sub _die { die }
+
 sub _read_makefile {
     my $self = shift;
     my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
-    $makefile =~ s/(.*)\&?WriteMakefile\(\s*?(.*?)\);(.*)/$2/s;
+    $makefile =~ s/^(.*)\&?WriteMakefile\s*?\(\s*(.*?)\s*\)\s*?;(.*)$/$2/s;
     my $makecode_begin = $1;
     my $makecode_end   = $3;
     $makecode_begin =~ s/\s*([#\w]+.*)\s*/$1/s;
@@ -444,35 +462,43 @@ sub _write {
 
 sub _compose_header {
     my $self = shift;
-    my ($insert_comments, $insert_statements);
+    my ($comments_header, $code_header) = ('','');
     my $note = '# Note: this file has been initially generated by '.__PACKAGE__." $VERSION";
+    my $pragmas = "use strict;\nuse warnings;\n";
     if (defined($self->{make_code}{begin})) {
         $self->_do_verbose("Removing ExtUtils::MakeMaker as dependency\n");
-        $self->{make_code}{begin} =~ s/[ ]*(?:require|use)\s+ExtUtils::MakeMaker\s*;//;
-        $insert_comments ||= '';
-        while ($self->{make_code}{begin} =~ s/^(#[!]?.*?\n)//) {
-            $insert_comments .= $1;
+        $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
+	# Removing pragmas quietly here to ensure that they'll be inserted after
+	# an eventually appearing version requirement.
+	$self->{make_code}{begin} =~ s/[ \t]*use\s+(?:strict|warnings)\s*;//g;
+        while ($self->{make_code}{begin} =~ s/^(#!?.*?\n)//) {
+            $comments_header .= $1;
         }
-	chomp($insert_comments);
-        $insert_statements ||= '';
-        while ($self->{make_code}{begin} =~ /(?:require|use)\s+.*?;/) {
+	chomp($comments_header);
+        while ($self->{make_code}{begin} =~ /(?:use|require)\s+.*?;/) {
             $self->{make_code}{begin} =~ s/^\n?(.*?;)//s;
-	    $insert_statements .= "$1\n";
+	    $code_header .= "$1\n";
         }
-	chomp($insert_statements);
+	$self->_do_verbose("Adding use strict & use warnings pragmas\n");
+	if ($code_header =~ /(?:use|require)\s+\d\.[\d_]*\s*;/) { 
+            $code_header =~ s/([ \t]*(?:use|require)\s+\d\.[\d_]*\s*;\n)(.*)/$1$pragmas$2/;
+	} else {
+	    $code_header = $pragmas . $code_header;
+	}
+	chomp($code_header);
 	1 while $self->{make_code}{begin} =~ s/^\n//;
 	chomp($self->{make_code}{begin}) while $self->{make_code}{begin} =~ /\n$/s;
     }
-    $self->{Data}{begin} = $insert_comments || $insert_statements
-      ? ($insert_comments  =~ /\w/ ? "$insert_comments\n" : '') . "$note\n" . 
-        ($insert_statements =~ /\w/ ? "\n$insert_statements\n\n" : "\n") .
+    $self->{Data}{begin} = $comments_header || $code_header
+      ? ($comments_header  =~ /\w/ ? "$comments_header\n" : '') . "$note\n" . 
+        ($code_header =~ /\w/ ? "\n$code_header\n\n" : "\n") .
         $self->{Data}{begin}
       : "$note\n\n" . $self->{Data}{begin};
 }
 
 sub _write_begin {
     my $self = shift;  
-    my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT}) - 1);
+    my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT})-1);
     $self->_subst_makecode('begin');
     $self->{Data}{begin} =~ s/(\$INDENT)/$1/eego;
     $self->_do_verbose(File::Basename::basename($self->{Config}{Build_PL}), " written:\n", 2);
@@ -538,7 +564,7 @@ sub _write_args {
 
 sub _write_end {
     my $self = shift;
-    my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT}) - 1);
+    my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT})-1);
     $self->_subst_makecode('end');
     $self->{Data}{end} =~ s/(\$INDENT)/$1/eego;
     $self->_do_verbose($self->{Data}{end}, 2);
@@ -581,7 +607,7 @@ sub _do_verbose {
 
 sub _debug {
     my $self = shift;
-    warn @_ if $self->{Config}{Debug};
+    warn @_ and <STDIN> if $self->{Config}{Debug};
 }
 
 1;
@@ -669,7 +695,7 @@ Module::Build::Convert - Makefile.PL to Build.PL converter
 
 =head1 SYNOPSIS
 
- require Module::Build::Convert; 
+ use Module::Build::Convert; 
 
  my %params = (Path => '/path/to/perl/distribution',
                Verbose => 2,
@@ -845,6 +871,9 @@ unsorted order after preceedingly sorted arguments.
 =head2 Begin code
 
 Code that preceeds converted C<Module::Build> arguments.
+
+ use strict;
+ use warnings;
 
  use Module::Build;
 

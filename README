@@ -2,7 +2,7 @@ NAME
     Module::Build::Convert - Makefile.PL to Build.PL converter
 
 SYNOPSIS
-     require Module::Build::Convert; 
+     use Module::Build::Convert; 
 
      my %params = (Path => '/path/to/perl/distribution',
                    Verbose => 2,
@@ -148,6 +148,9 @@ DATA SECTION
 
   Begin code
     Code that preceeds converted "Module::Build" arguments.
+
+     use strict;
+     use warnings;
 
      use Module::Build;
 

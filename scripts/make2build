@@ -41,7 +41,7 @@ Usage: $0 [switches] [path-to-distribution]
   -n           native ordering of build arguments
   -rc          create RC-file in homedir
   -v(v)        verbosity level
-  -V           version
+  -V           print version
   -x           execute Makefile.PL
 USAGE
     exit;
