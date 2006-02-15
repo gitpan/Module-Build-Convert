@@ -31,7 +31,7 @@ my $build = Module::Build->new
    script_files => [ 'scripts/make2build' ],
    license => 'perl',
    create_readme => 1,
-   create_makefile_pl => 'passthrough',
+   create_makefile_pl => 'traditional',
   );
   
 $build->create_build_script;

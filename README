@@ -112,7 +112,7 @@ DATA SECTION
      #conflicts            HASH
      license               unknown
      create_readme         1
-     create_makefile_pl    passthrough
+     create_makefile_pl    traditional
 
     Value may be either a string or of type "SCALAR, ARRAY, HASH".
 

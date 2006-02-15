@@ -1,5 +1,13 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.25 Tue Feb 14 17:33:46 CET 2006
+
+ - The create_makefile_pl default argument has been changed from
+   creating a passthrough Makefile.PL to write a traditional style
+   Makefile.PL instead.
+ 
+ - $self->{Config}{reloaded} renamed to $self->{Config}{reinit}.
+
 0.24 Sun Jan 29 21:49:32 CET 2006
 
  - If parsing the Makefile.PL doesn't succeed entirely and

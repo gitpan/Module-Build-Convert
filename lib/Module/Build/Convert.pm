@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.24';
+our $VERSION = '0.25';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -45,7 +45,7 @@ sub new {
 
 sub convert {
     my $self = shift;
-    if (!$self->{Config}{reloaded}) {
+    if (!$self->{Config}{reinit}) {
         $self->_create_rcfile if $self->{Config}{Create_RC};
         $self->_makefile_ok;
         $self->_get_data;
@@ -258,7 +258,7 @@ sub _parse_makefile {
 	    $trapped_loop{$makecode}++;
 	    if ($trapped_loop{$makecode} >= 2) {
 	        $self->{Config}{Exec_Makefile} = 1;
-	        $self->{Config}{reloaded} = 1;
+	        $self->{Config}{reinit} = 1;
 	    	$self->convert;
 	    	exit;
 	    }
@@ -642,7 +642,7 @@ clean.FILES           @add_to_cleanup
 #conflicts	      HASH
 license               unknown
 create_readme         1
-create_makefile_pl    passthrough
+create_makefile_pl    traditional
 
 # sorting order 
 -
@@ -833,7 +833,7 @@ Arguments attached to multidimensional structures are unsupported.
  #conflicts	       HASH
  license               unknown
  create_readme         1
- create_makefile_pl    passthrough
+ create_makefile_pl    traditional
 
 Value may be either a string or of type C<SCALAR, ARRAY, HASH>.
 
