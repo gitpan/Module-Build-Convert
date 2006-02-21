@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.25';
+our $VERSION = '0.25_01';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -196,13 +196,32 @@ sub _restore_globals {
 
 sub _parse_makefile {
     my $self = shift;
-    my (@histargs, %makeargs, %trapped_loop);
-    my ($makefile, $makecode_begin, $makecode_end) = $self->_read_makefile;
-    $self->{make_code}{begin} = $makecode_begin;
-    $self->{make_code}{end}   = $makecode_end;
+    my (@histargs, %makeargs, $makefile, %trapped_loop);
+    my $found_string = qr/^ 
+                            \s* 
+                            ['"]? (\w+) ['"]? 
+			    \s* => \s* 
+			    ['"]? ([\$ \@ \% \\ \/ \- \: \. \w]+ .*?) ['"]?
+			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
+                       /x;
+    my $found_array  = qr/^ 
+                            \s*
+                            ['"]? (\w+) ['"]?
+			    \s* => \s*
+			    \[ \s* (.*?) \s* \]
+			    (?: ,? \n | ,? (\s+ \# \s+ \w+ .*?) \n)
+                       /sx;
+    my $found_hash   = qr/^ 
+                            \s* 
+                            ['"]? (\w+) ['"]?
+			    \s* => \s*
+			    \{ \s* (.*?) \s*? \}
+			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
+	               /sx;
+    ($makefile, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
     $self->_debug("Entering parse\n");
     while ($makefile) {
-        if ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*['"]?([\$\@\%\\\/\-\:\.\w]+.*?)['"]?(?:,?\n?|,?(\s+#\s+\w+.*?)\n)//) {
+        if ($makefile =~ s/$found_string//) {
 	    my ($arg, $value, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $value =~ tr/['"]//d;
@@ -212,7 +231,7 @@ sub _parse_makefile {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
 	    $self->_debug("Found string\narg: $arg\nvalue: $value\ncomment: $comment\nremaining args:\n$makefile\n\n");
-	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\[\s*(.*?)\s*\](?:,?\n|,?(\s+#\s+\w+.*?)\n)//s) {
+	} elsif ($makefile =~ s/$found_array//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $makeargs{$arg} = [ map { tr/['",]//d; $_ } split /,\s*/, $values ];
@@ -221,7 +240,7 @@ sub _parse_makefile {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
 	    $self->_debug("Found array\narg: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
-	} elsif ($makefile =~ s/^\s*['"]?(\w+)['"]?\s*=>\s*\{\s*(.*?)\s*?\}(?:,?\n?|,?(\s+#\s+\w+.*?)\n)//s) {
+	} elsif ($makefile =~ s/$found_hash//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    my @values = split /,\s*/, $values;
@@ -238,7 +257,7 @@ sub _parse_makefile {
 	    $self->_debug("Found hash\nkey: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
 	} else {
 	    my ($debug_desc, $makecode);
-	    if ($makefile =~ s/^\s*(#.*)\n//s) {
+	    if ($makefile =~ s/^\s*(\#.*)\n//s) {
 	        $debug_desc = 'comment';
 	        $makecode = $1;
 	    } elsif ($makefile =~ s/^\s*(['"]?\w+['"]?\s*=>\s*<<['"]?(.*?)['"]?,.*\2)//s) {
@@ -285,8 +304,8 @@ sub _read_makefile {
     $makefile =~ s/^(.*)\&?WriteMakefile\s*?\(\s*(.*?)\s*\)\s*?;(.*)$/$2/s;
     my $makecode_begin = $1;
     my $makecode_end   = $3;
-    $makecode_begin =~ s/\s*([#\w]+.*)\s*/$1/s;
-    $makecode_end   =~ s/\s*([#\w]+.*)\s*/$1/s;
+    $makecode_begin =~ s/\s*([\#\w]+.*)\s*/$1/s;
+    $makecode_end   =~ s/\s*([\#\w]+.*)\s*/$1/s;
     return ($makefile, $makecode_begin, $makecode_end);
 }
 
@@ -471,7 +490,7 @@ sub _compose_header {
 	# Removing pragmas quietly here to ensure that they'll be inserted after
 	# an eventually appearing version requirement.
 	$self->{make_code}{begin} =~ s/[ \t]*use\s+(?:strict|warnings)\s*;//g;
-        while ($self->{make_code}{begin} =~ s/^(#!?.*?\n)//) {
+        while ($self->{make_code}{begin} =~ s/^(\#\!?.*?\n)//) {
             $comments_header .= $1;
         }
 	chomp($comments_header);
@@ -554,7 +573,7 @@ sub _write_args {
 	no warnings 'uninitialized';
 	if ($self->{make_code}{$arg}) {
 	    foreach my $line (@{$self->{make_code}{$arg}}) {
-	        $line .= ',' unless $line =~ /^#/;
+	        $line .= ',' unless $line =~ /^\#/;
     	        $self->_do_verbose("$self->{INDENT}$line\n", 2);
 	        print "$self->{INDENT}$line\n";
 	    }

@@ -1,5 +1,12 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.25_01 Tue Feb 21 00:51:57 CET 2006
+
+ - The regular expressions of importance to the parsing process
+   have been visually reformatted with the /x modifier to be more
+   readable & fit in nicely to separate strings - use is made 
+   thereof for string, array and hash detection.
+
 0.25 Tue Feb 14 17:33:46 CET 2006
 
  - The create_makefile_pl default argument has been changed from
