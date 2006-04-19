@@ -1,5 +1,12 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.26 Thu Apr 20 00:22:46 CEST 2006
+
+ - The test suite has been extented to include convert.t which
+   tests for a basic makeargs conversion with all currently enlisted 
+   arguments in the conversion table. The won thereof build args are 
+   also subject to sane type [SCALAR, ARRAY, HASH] detection.
+
 0.25_01 Tue Feb 21 00:51:57 CET 2006
 
  - The regular expressions of importance to the parsing process
