@@ -8,5 +8,6 @@ META.yml
 README
 scripts/make2build
 t/00-load.t
+t/convert.t
 t/pod-coverage.t
 t/pod.t

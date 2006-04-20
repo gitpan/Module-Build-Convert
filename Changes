@@ -1,5 +1,9 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.27 Thu Apr 20 17:17:59 CEST 2006
+
+ - Included convert.t which has been previously (v.0.26) omitted.
+
 0.26 Thu Apr 20 00:22:46 CEST 2006
 
  - The test suite has been extented to include convert.t which

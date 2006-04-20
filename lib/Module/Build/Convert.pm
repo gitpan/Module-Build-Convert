@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 sub new {
     my ($self, %params) = (shift, @_);
