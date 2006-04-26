@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 
 sub new {
     my ($self, %params) = (shift, @_);
@@ -23,6 +23,7 @@ sub new {
 	                          Build_PL         => $params{Build_PL}         || 'Build.PL',
 		                  MANIFEST         => $params{MANIFEST}         || 'MANIFEST',
 				  RC               => $params{RC}               || '.make2buildrc',
+				  Dont_Overwrite   => $params{Dont_Overwrite}   || 1,
 				  Create_RC        => $params{Create_RC}        || 0,
 				  Exec_Makefile    => $params{Exec_Makefile}    || 0,
 			          Verbose          => $params{Verbose}          || 0,
@@ -45,6 +46,7 @@ sub new {
 
 sub convert {
     my $self = shift;
+    $self->_exists;
     if (!$self->{Config}{reinit}) {
         $self->_create_rcfile if $self->{Config}{Create_RC};
         $self->_makefile_ok;
@@ -55,6 +57,13 @@ sub convert {
     $self->_dump;
     $self->_write;
     $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
+}
+
+sub _exists {
+    my $self = shift;
+    if (-e $self->{Config}{Build_PL} && $self->{Config}{Dont_Overwrite}) {
+        die "A Build.PL exists already\n";
+    }
 }
 
 sub _create_rcfile {
@@ -79,7 +88,7 @@ sub _makefile_ok {
         $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
     } else {
         die 'No ', File::Basename::basename($self->{Config}{Makefile_PL}), ' found at ', 
-          $self->{Config}{Path} !~ /^\.\// && $self->{Config}{Path} =~ m{[quotemeta([/\])]} 
+          $self->{Config}{Path}
 	    ? File::Basename::dirname($self->{Config}{Makefile_PL}) 
 	    : Cwd::cwd(), "\n";
     }
@@ -761,6 +770,11 @@ Filename of the MANIFEST file. Default: F<MANIFEST>
 =item RC
 
 Filename of the RC file. Default: F<.make2buildrc>
+
+=item Dont_Overwrite
+
+If a Build.PL already exists, output a warning and exit.
+Default: 1
 
 =item Create_RC
 

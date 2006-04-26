@@ -39,6 +39,9 @@ CONSTRUCTOR
 
     RC  Filename of the RC file. Default: .make2buildrc
 
+    Dont_Overwrite
+        If a Build.PL already exists, output a warning and exit. Default: 1
+
     Create_RC
         Create a RC file in the homedir of the current user. Default: 0
 

@@ -1,6 +1,6 @@
 ---
 name: Module-Build-Convert
-version: 0.27
+version: 0.28
 author:
   - 'Steven Schubiger <schubiger@cpan.org>'
 abstract: Makefile.PL to Build.PL converter
@@ -26,8 +26,8 @@ recommends:
 provides:
   Module::Build::Convert:
     file: lib/Module/Build/Convert.pm
-    version: 0.27
-generated_by: Module::Build version 0.2709
+    version: 0.28
+generated_by: Module::Build version 0.271
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
   version: 1.2

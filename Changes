@@ -1,5 +1,15 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.28 Wed Apr 26 22:08:27 CEST 2006
+
+ - Added method _exists() which conditionally checks for a preexisting 
+   Build.PL and will warn & exit (die) if it finds one. May be disabled 
+   by supplying the argument 'Dont_Overwrite' with a negative value to 
+   the object constructor new().
+   
+ - The status message output in the method _makefile_ok() when a Build.PL
+   is missing has been simplified to appreciate absolute paths correctly.
+
 0.27 Thu Apr 20 17:17:59 CEST 2006
 
  - Included convert.t which has been previously (v.0.26) omitted.
