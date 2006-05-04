@@ -14,10 +14,11 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 sub new {
-    my ($self, %params) = (shift, @_);
+    my ($self, %params) = @_;
+    my $class = ref($self) || $self;
     my $obj = bless { Config => { Path             => $params{Path}             || '',
                                   Makefile_PL      => $params{Makefile_PL}      || 'Makefile.PL',
 	                          Build_PL         => $params{Build_PL}         || 'Build.PL',
@@ -31,7 +32,7 @@ sub new {
 			          Use_Native_Order => $params{Use_Native_Order} || 0,
 			          Len_Indent       => $params{Len_Indent}       || 3,
 			          DD_Indent        => $params{DD_Indent}        || 2,
-	               	          DD_Sortkeys      => $params{DD_Sortkeys}      || 1 }}, $self;
+	               	          DD_Sortkeys      => $params{DD_Sortkeys}      || 1 }}, $class;
     $obj->{Config}{Makefile_PL} = File::Basename::basename($obj->{Config}{Makefile_PL});
     $obj->{Config}{Build_PL}    = File::Basename::basename($obj->{Config}{Build_PL});
     $obj->{Config}{MANIFEST}    = File::Basename::basename($obj->{Config}{MANIFEST});
