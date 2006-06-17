@@ -1,5 +1,10 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.30 Sat Jun 17 21:39:33 CEST 2006
+
+ - Extended t/convert.t to mark defaulted arguments to be inserted
+   as such.
+
 0.29 Thu May  4 22:52:46 CEST 2006
 
  - Added $class variable to constructor new() which is filled with 

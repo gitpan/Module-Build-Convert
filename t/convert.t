@@ -63,8 +63,14 @@ my %table = (module_name          => 'NAME',
 
 foreach (@{$make->{build_args}}) {
     my ($buildarg, $type) = each %$_;
-    my $makearg = $table{$buildarg};    
-    is (exists $table{$buildarg}, 1, "$table{$buildarg} => $buildarg");
+    my $makearg = $table{$buildarg};
+
+    my $testmsg = $table{$buildarg} 
+      ? "$table{$buildarg} => $buildarg" 
+      : "$buildarg is a default argument";
+    
+    is (exists $table{$buildarg}, 1, $testmsg);
+    
     if (ref $type eq 'ARRAY' || ref $type eq 'HASH') {
         is (ref $type, $makeargs{$makearg}, "$buildarg is of type " . ref $type);
     } else {
