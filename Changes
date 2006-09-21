@@ -1,6 +1,14 @@
 Revision history for Perl extension Module::Build::Convert.
 
-0.31 Fri Sep 22 13:49:07 CEST 2006
+0.32 Thu Sep 21 21:32:27 CEST 2006
+
+ - Improved the debugging visual output for the parsing process.
+   Removed the usage of *empty* for missing values.
+   
+ - "Press [enter] to continue" will be displayed after each string,
+   array or hash processed.
+ 
+0.31 Thu Sep 21 13:49:07 CEST 2006
 
  - Modified the string parsing regular expression to not match
    whenever a { or [ appears within the current bit that's parsed. 

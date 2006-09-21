@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 sub new {
     my ($self, %params) = @_;
@@ -215,8 +215,6 @@ sub _restore_globals {
 sub _parse_makefile {
     my $self = shift;
     my (@histargs, %makeargs, $makefile, %trapped_loop);
-    my $emptyvaluedesc = '*empty*';
-    
     my $found_string = qr/^ 
                             \s* 
                             ['"]? (\w+) ['"]? 
@@ -237,28 +235,26 @@ sub _parse_makefile {
 			    \s* => \s*
 			    \{ \s* (.*?) \s*? \}
 			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
-	               /sx;
-		       
+	               /sx; 
     ($makefile, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
-    $self->_debug("Entering parse\n");
-    
+    $self->_debug("Entering parse\n\n",'no_wait');
     while ($makefile) {
         if ($makefile =~ s/$found_string//) {
 	    my ($arg, $value, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $value =~ tr/['"]//d;
             $makeargs{$arg} = $value;
-	    $value ||= $emptyvaluedesc;
 	    push @histargs, $arg;
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
 	    $self->_debug(<<DEBUG);
 Found string ''
-arg: $arg
-value: $value
-comment: $comment
-remaining args:
++++++++++++++++
+\$arg: $arg
+\$value: $value
+\$comment: $comment
+\$remaining args:
 $makefile
 
 DEBUG
@@ -266,17 +262,17 @@ DEBUG
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $makeargs{$arg} = [ map { tr/['",]//d; $_ } split /,\s*/, $values ];
-	    $values ||= $emptyvaluedesc;
 	    push @histargs, $arg;
 	    if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
 	    $self->_debug(<<DEBUG);
 Found array []
-arg: $arg
-values: $values
-comment: $comment
-remaining args:
+++++++++++++++
+\$arg: $arg
+\$values: $values
+\$comment: $comment
+\$remaining args:
 $makefile
 
 DEBUG
@@ -284,7 +280,6 @@ DEBUG
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    my @values = split /,\s*/, $values;
-	    $values ||= $emptyvaluedesc;
 	    my @values_clean;
 	    foreach my $value (@values) {
 		push @values_clean, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
@@ -297,10 +292,11 @@ DEBUG
 	    }
 	    $self->_debug(<<DEBUG);
 Found hash {}
-key: $arg
-values: $values
-comment: $comment
-remaining args:
++++++++++++++
+\$key: $arg
+\$values: $values
+\$comment: $comment
+\$remaining args:
 $makefile
 
 DEBUG
@@ -341,7 +337,7 @@ DEBUG
 	    push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
 	}
     }
-    $self->_debug("Leaving parse\n");
+    $self->_debug("Leaving parse\n",'no_wait');
     %{$self->{make_args}} = %makeargs;
 }
 
@@ -679,7 +675,12 @@ sub _do_verbose {
 
 sub _debug {
     my $self = shift;
-    warn @_ and <STDIN> if $self->{Config}{Debug};
+    if ($self->{Config}{Debug}) {
+        pop and my $no_wait = 1 if $_[-1] eq 'no_wait';
+        warn @_;
+	warn "Press [enter] to continue...\n" 
+	  and <STDIN> unless $no_wait;
+    }
 }
 
 1;
