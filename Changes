@@ -1,5 +1,25 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.31 Fri Sep 22 13:49:07 CEST 2006
+
+ - Modified the string parsing regular expression to not match
+   whenever a { or [ appears within the current bit that's parsed. 
+   
+ - The debugging output are now contained within here-docs.
+   
+ - Added '' / [] / {} to the appropriate debugging descriptions 
+  (string, array and hash).
+  
+ - While parsing, empty values of either a string, array or hash 
+   will be substituted with *empty*.
+   
+ - Extended the _exists() method to ask whether the Build.PL
+   should be overwritten in case the option "Dont_Overwrite_Auto"
+   is activated; will continue normally if disabled.
+   
+ - The initial note created by Module::Build::Compat will be
+   munged.
+
 0.30 Sat Jun 17 21:39:33 CEST 2006
 
  - Extended t/convert.t to mark defaulted arguments to be inserted

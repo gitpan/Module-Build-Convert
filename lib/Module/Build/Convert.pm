@@ -14,25 +14,25 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 sub new {
     my ($self, %params) = @_;
     my $class = ref($self) || $self;
-    my $obj = bless { Config => { Path             => $params{Path}             || '',
-                                  Makefile_PL      => $params{Makefile_PL}      || 'Makefile.PL',
-	                          Build_PL         => $params{Build_PL}         || 'Build.PL',
-		                  MANIFEST         => $params{MANIFEST}         || 'MANIFEST',
-				  RC               => $params{RC}               || '.make2buildrc',
-				  Dont_Overwrite   => $params{Dont_Overwrite}   || 1,
-				  Create_RC        => $params{Create_RC}        || 0,
-				  Exec_Makefile    => $params{Exec_Makefile}    || 0,
-			          Verbose          => $params{Verbose}          || 0,
-				  Debug            => $params{Debug}            || 0,
-			          Use_Native_Order => $params{Use_Native_Order} || 0,
-			          Len_Indent       => $params{Len_Indent}       || 3,
-			          DD_Indent        => $params{DD_Indent}        || 2,
-	               	          DD_Sortkeys      => $params{DD_Sortkeys}      || 1 }}, $class;
+    my $obj = bless { Config => { Path                => $params{Path}                || '',
+                                  Makefile_PL         => $params{Makefile_PL}         || 'Makefile.PL',
+	                          Build_PL            => $params{Build_PL}            || 'Build.PL',
+		                  MANIFEST            => $params{MANIFEST}            || 'MANIFEST',
+				  RC                  => $params{RC}                  || '.make2buildrc',
+				  Dont_Overwrite_Auto => $params{Dont_Overwrite_Auto} || 1,
+				  Create_RC           => $params{Create_RC}           || 0,
+				  Exec_Makefile       => $params{Exec_Makefile}       || 0,
+			          Verbose             => $params{Verbose}             || 0,
+				  Debug               => $params{Debug}               || 0,
+			          Use_Native_Order    => $params{Use_Native_Order}    || 0,
+			          Len_Indent          => $params{Len_Indent}          || 3,
+			          DD_Indent           => $params{DD_Indent}           || 2,
+	               	          DD_Sortkeys         => $params{DD_Sortkeys}         || 1 }}, $class;
     $obj->{Config}{Makefile_PL} = File::Basename::basename($obj->{Config}{Makefile_PL});
     $obj->{Config}{Build_PL}    = File::Basename::basename($obj->{Config}{Build_PL});
     $obj->{Config}{MANIFEST}    = File::Basename::basename($obj->{Config}{MANIFEST});
@@ -62,8 +62,16 @@ sub convert {
 
 sub _exists {
     my $self = shift;
-    if (-e $self->{Config}{Build_PL} && $self->{Config}{Dont_Overwrite}) {
-        die "A Build.PL exists already\n";
+    if (-e $self->{Config}{Build_PL}) {
+        print 'A Build.PL exists already';   
+        if ($self->{Config}{Dont_Overwrite_Auto}) { 
+            print ".\n";
+	    print 'Shall I overwrite it? [y/n] ';
+	    chomp(my $input = <STDIN>); 
+	    exit(1) unless $input =~ /y/i;
+        } else {
+            print ", continuing...\n";
+        }
     }
 }
 
@@ -207,10 +215,12 @@ sub _restore_globals {
 sub _parse_makefile {
     my $self = shift;
     my (@histargs, %makeargs, $makefile, %trapped_loop);
+    my $emptyvaluedesc = '*empty*';
+    
     my $found_string = qr/^ 
                             \s* 
                             ['"]? (\w+) ['"]? 
-			    \s* => \s* 
+			    \s* => \s* [^ \{ \[ ]
 			    ['"]? ([\$ \@ \% \\ \/ \- \: \. \w]+ .*?) ['"]?
 			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
                        /x;
@@ -228,32 +238,53 @@ sub _parse_makefile {
 			    \{ \s* (.*?) \s*? \}
 			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
 	               /sx;
+		       
     ($makefile, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
     $self->_debug("Entering parse\n");
+    
     while ($makefile) {
         if ($makefile =~ s/$found_string//) {
 	    my ($arg, $value, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $value =~ tr/['"]//d;
             $makeargs{$arg} = $value;
+	    $value ||= $emptyvaluedesc;
 	    push @histargs, $arg;
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found string\narg: $arg\nvalue: $value\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	    $self->_debug(<<DEBUG);
+Found string ''
+arg: $arg
+value: $value
+comment: $comment
+remaining args:
+$makefile
+
+DEBUG
 	} elsif ($makefile =~ s/$found_array//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    $makeargs{$arg} = [ map { tr/['",]//d; $_ } split /,\s*/, $values ];
+	    $values ||= $emptyvaluedesc;
 	    push @histargs, $arg;
 	    if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found array\narg: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	    $self->_debug(<<DEBUG);
+Found array []
+arg: $arg
+values: $values
+comment: $comment
+remaining args:
+$makefile
+
+DEBUG
 	} elsif ($makefile =~ s/$found_hash//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
 	    my @values = split /,\s*/, $values;
+	    $values ||= $emptyvaluedesc;
 	    my @values_clean;
 	    foreach my $value (@values) {
 		push @values_clean, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
@@ -264,7 +295,15 @@ sub _parse_makefile {
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
 	    }
-	    $self->_debug("Found hash\nkey: $arg\nvalues: $values\ncomment: $comment\nremaining args:\n$makefile\n\n");
+	    $self->_debug(<<DEBUG);
+Found hash {}
+key: $arg
+values: $values
+comment: $comment
+remaining args:
+$makefile
+
+DEBUG
 	} else {
 	    my ($debug_desc, $makecode);
 	    if ($makefile =~ s/^\s*(\#.*)\n//s) {
@@ -497,6 +536,10 @@ sub _compose_header {
     if (defined($self->{make_code}{begin})) {
         $self->_do_verbose("Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
+	if ($self->{make_code}{begin} =~ /Module::Build::Compat/) {
+	    $self->_do_verbose("Removing Module::Build::Compat Note\n");
+	    $self->{make_code}{begin} =~ s/^\#.*Module::Build::Compat.*?\n//s;
+	}
 	# Removing pragmas quietly here to ensure that they'll be inserted after
 	# an eventually appearing version requirement.
 	$self->{make_code}{begin} =~ s/[ \t]*use\s+(?:strict|warnings)\s*;//g;
@@ -772,9 +815,10 @@ Filename of the MANIFEST file. Default: F<MANIFEST>
 
 Filename of the RC file. Default: F<.make2buildrc>
 
-=item Dont_Overwrite
+=item Dont_Overwrite_Auto
 
-If a Build.PL already exists, output a warning and exit.
+If a Build.PL already exists, output a notification and ask
+whether it should be overwritten.
 Default: 1
 
 =item Create_RC
