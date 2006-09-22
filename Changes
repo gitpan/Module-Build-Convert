@@ -1,5 +1,24 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.33 Fri Sep 22 16:43:04 CEST 2006
+
+ - Optimized the method _exists() to output a newline in verbose 
+   mode after being asked whether one wants to override an existing 
+   Build.PL.
+   
+ - Prohibited the method _exists() to be twice called when we reinit 
+   the conversion.
+   
+ - Verbose output statements contain three leading stars (***).
+ 
+ - The output generated when while parsing a code bit is found,
+   is now embedded within a here-doc.
+   
+ - The string parsing regular expression has been improved to
+   recognize mail adresses within <>.
+   
+ - Extended the code parsing regular expression for comments.
+
 0.32 Thu Sep 21 21:32:27 CEST 2006
 
  - Improved the debugging visual output for the parsing process.
@@ -13,7 +32,7 @@ Revision history for Perl extension Module::Build::Convert.
  - Modified the string parsing regular expression to not match
    whenever a { or [ appears within the current bit that's parsed. 
    
- - The debugging output are now contained within here-docs.
+ - The debugging output is now contained within here-docs.
    
  - Added '' / [] / {} to the appropriate debugging descriptions 
   (string, array and hash).

@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 sub new {
     my ($self, %params) = @_;
@@ -47,8 +47,8 @@ sub new {
 
 sub convert {
     my $self = shift;
-    $self->_exists;
     if (!$self->{Config}{reinit}) {
+        $self->_exists;
         $self->_create_rcfile if $self->{Config}{Create_RC};
         $self->_makefile_ok;
         $self->_get_data;
@@ -69,6 +69,7 @@ sub _exists {
 	    print 'Shall I overwrite it? [y/n] ';
 	    chomp(my $input = <STDIN>); 
 	    exit(1) unless $input =~ /y/i;
+	    print "\n" if $self->{Config}{Verbose};
         } else {
             print ", continuing...\n";
         }
@@ -101,10 +102,10 @@ sub _makefile_ok {
 	    ? File::Basename::dirname($self->{Config}{Makefile_PL}) 
 	    : Cwd::cwd(), "\n";
     }
-    die "$self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n"
+    die "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n"
       unless $makefile =~ /WriteMakefile\s*\(/s;
-    $self->_do_verbose("Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
-    warn "Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n" 
+    $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
+    warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n" 
       and $self->{Config}{Exec_Makefile} = 1
           if $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile};
 }
@@ -170,7 +171,7 @@ sub _parse_data {
 sub _extract_args {
     my $self = shift;
     if ($self->{Config}{Exec_Makefile}) {
-        $self->_do_verbose("Executing $self->{Config}{Makefile_PL}\n");
+        $self->_do_verbose("*** Executing $self->{Config}{Makefile_PL}\n");
         $self->_run_makefile;
     } else {
         $self->_parse_makefile;
@@ -219,7 +220,7 @@ sub _parse_makefile {
                             \s* 
                             ['"]? (\w+) ['"]? 
 			    \s* => \s* [^ \{ \[ ]
-			    ['"]? ([\$ \@ \% \\ \/ \- \: \. \w]+ .*?) ['"]?
+			    ['"]? ([\$ \@ \% \< \>\\ \/ \- \: \. \w]+ .*?) ['"]?
 			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
                        /x;
     my $found_array  = qr/^ 
@@ -237,7 +238,7 @@ sub _parse_makefile {
 			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
 	               /sx; 
     ($makefile, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
-    $self->_debug("Entering parse\n\n",'no_wait');
+    $self->_debug("*** Entering parse\n\n",'no_wait');
     while ($makefile) {
         if ($makefile =~ s/$found_string//) {
 	    my ($arg, $value, $comment) = ($1,$2,$3);
@@ -279,12 +280,12 @@ DEBUG
 	} elsif ($makefile =~ s/$found_hash//s) {
 	    my ($arg, $values, $comment) = ($1,$2,$3);
 	    $comment ||= '';
-	    my @values = split /,\s*/, $values;
-	    my @values_clean;
-	    foreach my $value (@values) {
-		push @values_clean, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
+	    my @values_debug = split /,\s*/, $values;
+	    my @values;
+	    foreach my $value (@values_debug) {
+		push @values, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
 	    }
-	    @values = @values_clean;
+	    @values_debug = map { "$_\n        " } @values_debug;
 	    $makeargs{$arg} = { @values };
 	    push @histargs, $arg;
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
@@ -294,7 +295,7 @@ DEBUG
 Found hash {}
 +++++++++++++
 \$key: $arg
-\$values: $values
+\$values: @values_debug
 \$comment: $comment
 \$remaining args:
 $makefile
@@ -302,7 +303,7 @@ $makefile
 DEBUG
 	} else {
 	    my ($debug_desc, $makecode);
-	    if ($makefile =~ s/^\s*(\#.*)\n//s) {
+	    if ($makefile =~ s/^\s*(\#.*\s*(?:=>\s*['"]?\w*['"]?))?,?\n//s) {
 	        $debug_desc = 'comment';
 	        $makecode = $1;
 	    } elsif ($makefile =~ s/^\s*(['"]?\w+['"]?\s*=>\s*<<['"]?(.*?)['"]?,.*\2)//s) {
@@ -326,7 +327,14 @@ DEBUG
 	    	$self->convert;
 	    	exit;
 	    }
-	    $self->_debug("Found code\n$debug_desc: $makecode\nremaining args:\n$makefile\n\n");
+	    $self->_debug(<<DEBUG);
+Found code &
+++++++++++++
+$debug_desc: $makecode
+remaining args:
+$makefile
+
+DEBUG
 	    SUBST: foreach my $make (keys %{$self->{Data}{table}}) {
 		if ($makecode =~ /\b$make\b/s) {
 		    $makecode =~ s/$make/$self->{Data}{table}{$make}/;
@@ -337,7 +345,7 @@ DEBUG
 	    push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
 	}
     }
-    $self->_debug("Leaving parse\n",'no_wait');
+    $self->_debug("*** Leaving parse\n\n",'no_wait');
     %{$self->{make_args}} = %makeargs;
 }
 
@@ -521,7 +529,7 @@ sub _write {
     $self->_write_end;
     $fh->close;
     select($selold);
-    $self->_do_verbose("Conversion done\n");
+    $self->_do_verbose("\n*** Conversion done\n");
 }
 
 sub _compose_header {
@@ -530,10 +538,10 @@ sub _compose_header {
     my $note = '# Note: this file has been initially generated by '.__PACKAGE__." $VERSION";
     my $pragmas = "use strict;\nuse warnings;\n";
     if (defined($self->{make_code}{begin})) {
-        $self->_do_verbose("Removing ExtUtils::MakeMaker as dependency\n");
+        $self->_do_verbose("*** Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
 	if ($self->{make_code}{begin} =~ /Module::Build::Compat/) {
-	    $self->_do_verbose("Removing Module::Build::Compat Note\n");
+	    $self->_do_verbose("*** Removing Module::Build::Compat Note\n");
 	    $self->{make_code}{begin} =~ s/^\#.*Module::Build::Compat.*?\n//s;
 	}
 	# Removing pragmas quietly here to ensure that they'll be inserted after
@@ -547,7 +555,7 @@ sub _compose_header {
             $self->{make_code}{begin} =~ s/^\n?(.*?;)//s;
 	    $code_header .= "$1\n";
         }
-	$self->_do_verbose("Adding use strict & use warnings pragmas\n");
+	$self->_do_verbose("*** Adding use strict & use warnings pragmas\n");
 	if ($code_header =~ /(?:use|require)\s+\d\.[\d_]*\s*;/) { 
             $code_header =~ s/([ \t]*(?:use|require)\s+\d\.[\d_]*\s*;\n)(.*)/$1$pragmas$2/;
 	} else {
@@ -569,7 +577,8 @@ sub _write_begin {
     my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT})-1);
     $self->_subst_makecode('begin');
     $self->{Data}{begin} =~ s/(\$INDENT)/$1/eego;
-    $self->_do_verbose(File::Basename::basename($self->{Config}{Build_PL}), " written:\n", 2);
+    $self->_do_verbose("\n", File::Basename::basename($self->{Config}{Build_PL}), " written:\n", 2);
+    $self->_do_verbose('=' x (length($self->{Config}{Build_PL}) + 9), "\n", 2);
     $self->_do_verbose($self->{Data}{begin}, 2);
     print $self->{Data}{begin};
 }
@@ -660,7 +669,7 @@ sub _add_to_manifest {
 	  or die "Can't open $self->{Config}{MANIFEST}: $!\n";
         print $fh sort @manifest;
         $fh->close;
-	$self->_do_verbose("Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
+	$self->_do_verbose("*** Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
     }
 }
 
