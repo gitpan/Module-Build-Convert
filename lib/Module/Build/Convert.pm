@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 
 sub new {
     my ($self, %params) = @_;
@@ -33,31 +33,45 @@ sub new {
 			          Len_Indent          => $params{Len_Indent}          || 3,
 			          DD_Indent           => $params{DD_Indent}           || 2,
 	               	          DD_Sortkeys         => $params{DD_Sortkeys}         || 1 }}, $class;
-    $obj->{Config}{Makefile_PL} = File::Basename::basename($obj->{Config}{Makefile_PL});
-    $obj->{Config}{Build_PL}    = File::Basename::basename($obj->{Config}{Build_PL});
-    $obj->{Config}{MANIFEST}    = File::Basename::basename($obj->{Config}{MANIFEST});
-    $obj->{Config}{RC}          = File::Spec->catfile(File::HomeDir::home(), $obj->{Config}{RC});
-    if ($params{Path}) {
-        $obj->{Config}{Makefile_PL} = File::Spec->catfile($params{Path}, $obj->{Config}{Makefile_PL});
-        $obj->{Config}{Build_PL}    = File::Spec->catfile($params{Path}, $obj->{Config}{Build_PL});
-	$obj->{Config}{MANIFEST}    = File::Spec->catfile($params{Path}, $obj->{Config}{MANIFEST});
-    }
+    $obj->{Config}{Makefile_PL}     = File::Basename::basename($obj->{Config}{Makefile_PL});
+    $obj->{Config}{Build_PL}        = File::Basename::basename($obj->{Config}{Build_PL});
+    $obj->{Config}{MANIFEST}        = File::Basename::basename($obj->{Config}{MANIFEST});
+    $obj->{Config}{RC}              = File::Spec->catfile(File::HomeDir::home(), $obj->{Config}{RC});
+    $obj->{Config}{Build_PL_Length} = length($obj->{Config}{Build_PL});
     return $obj;
 }
 
 sub convert {
     my $self = shift;
-    if (!$self->{Config}{reinit}) {
-        $self->_exists;
-        $self->_create_rcfile if $self->{Config}{Create_RC};
-        $self->_makefile_ok;
-        $self->_get_data;
+    my @dirs;
+    if ($self->{Config}{Path}) {
+        opendir(my $dh, $self->{Config}{Path}) or die "Can't open $self->{Config}{Path}\n";
+	@dirs = grep { /[\w\-]+[\d\.]+/ and -d $_ } sort readdir $dh;
+	unshift @dirs, $self->{Config}{Path} unless @dirs;
+    } else {
+        unshift @dirs, '.';
     }
-    $self->_extract_args;
-    $self->_convert;
-    $self->_dump;
-    $self->_write;
-    $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
+    my $Makefile_PL = $self->{Config}{Makefile_PL};
+    my $Build_PL    = $self->{Config}{Build_PL};
+    my $MANIFEST    = $self->{Config}{MANIFEST};	    
+    foreach my $dir (@dirs) {
+	    $self->{Config}{Makefile_PL} = File::Spec->catfile($dir, $Makefile_PL);
+            $self->{Config}{Build_PL}    = File::Spec->catfile($dir, $Build_PL);
+	    $self->{Config}{MANIFEST}    = File::Spec->catfile($dir, $MANIFEST);    
+            
+	    if (!$self->{Config}{reinit}) {
+	        $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
+                $self->_exists;
+                $self->_create_rcfile if $self->{Config}{Create_RC};
+                next if $self->_makefile_ok eq 'skip';
+                $self->_get_data;
+            }
+            $self->_extract_args;
+            $self->_convert;
+            $self->_dump;
+            $self->_write;
+            $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
+    }
 }
 
 sub _exists {
@@ -86,7 +100,7 @@ sub _create_rcfile {
 	my $fh = IO::File->new(">$rcfile") or die "Can't open $rcfile: $!\n";
 	print $fh $data;
 	$fh->close;
-	print "Created $rcfile\n";
+	print "*** Created $rcfile\n";
 	exit;
     }
 }
@@ -102,9 +116,8 @@ sub _makefile_ok {
 	    ? File::Basename::dirname($self->{Config}{Makefile_PL}) 
 	    : Cwd::cwd(), "\n";
     }
-    die "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n"
-      unless $makefile =~ /WriteMakefile\s*\(/s;
-    $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
+    warn "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n"
+      and return 'skip' unless $makefile =~ /WriteMakefile\s*\(/s;
     warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n" 
       and $self->{Config}{Exec_Makefile} = 1
           if $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile};
@@ -529,7 +542,7 @@ sub _write {
     $self->_write_end;
     $fh->close;
     select($selold);
-    $self->_do_verbose("\n*** Conversion done\n");
+    $self->_do_verbose("\n*** Conversion done\n\n");
 }
 
 sub _compose_header {
@@ -578,7 +591,7 @@ sub _write_begin {
     $self->_subst_makecode('begin');
     $self->{Data}{begin} =~ s/(\$INDENT)/$1/eego;
     $self->_do_verbose("\n", File::Basename::basename($self->{Config}{Build_PL}), " written:\n", 2);
-    $self->_do_verbose('=' x (length($self->{Config}{Build_PL}) + 9), "\n", 2);
+    $self->_do_verbose('=' x ($self->{Config}{Build_PL_Length} + 9), "\n", 2);
     $self->_do_verbose($self->{Data}{begin}, 2);
     print $self->{Data}{begin};
 }
@@ -779,7 +792,7 @@ Module::Build::Convert - Makefile.PL to Build.PL converter
 
  use Module::Build::Convert; 
 
- my %params = (Path => '/path/to/perl/distribution',
+ my %params = (Path => '/path/to/perl/distribution(s)',
                Verbose => 2,
 	       Use_Native_Order => 1,
                Len_Indent => 4);
@@ -807,7 +820,9 @@ Options:
 
 =item Path
 
-Path to a Perl distribution. Default: C<''>
+Path to a Perl distribution. May point to a single distribution 
+directory or to one containing more than one distribution. 
+Default: C<''>
 
 =item Makefile_PL
 

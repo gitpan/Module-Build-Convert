@@ -4,7 +4,7 @@ NAME
 SYNOPSIS
      use Module::Build::Convert; 
 
-     my %params = (Path => '/path/to/perl/distribution',
+     my %params = (Path => '/path/to/perl/distribution(s)',
                    Verbose => 2,
                    Use_Native_Order => 1,
                    Len_Indent => 4);
@@ -26,7 +26,9 @@ CONSTRUCTOR
     Options:
 
     Path
-        Path to a Perl distribution. Default: ''
+        Path to a Perl distribution. May point to a single distribution
+        directory or to one containing more than one distribution. Default:
+        ''
 
     Makefile_PL
         Filename of the Makefile script. Default: Makefile.PL

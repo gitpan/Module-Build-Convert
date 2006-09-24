@@ -1,5 +1,18 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.34 Sun Sep 24 13:01:42 CEST 2006
+
+ - Module::Build::Convert is now capable of doing the conversion 
+   automatically for all modules within a certain directory with 
+   make2build being only called once with the relative/absolute 
+   path to the top-level directory provided.
+   
+ - The initial converting message showing which paths have been
+   gathered for the Build.PL & Makefile.PL has been relocated
+   in order to appear before the method _exists() is being called.
+   Increases visual overview regarding which module is being 
+   currently processed largely.
+
 0.33 Fri Sep 22 16:43:04 CEST 2006
 
  - Optimized the method _exists() to output a newline in verbose 
