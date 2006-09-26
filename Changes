@@ -1,5 +1,21 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.35 Tue Sep 26 08:52:34 CEST 2006
+
+ - If we're automatically processing multiple distributions
+   and the verbose mode has been activated, a summary will be
+   output when converting has come to an end. The summary lists
+   which distributions were successfully processed (or not) and
+   whether they've been parsed or executed.
+   
+ - Made the paths to Makefile.PL, Build.PL and MANIFEST
+   absolute to avoid misleading paths when not in the directory
+   that has been passed as argument to make2build.
+   
+ - Adjusted the debugging output to be shown for all parseable 
+   distributions contained within the path that has been specified 
+   via make2build.
+
 0.34 Sun Sep 24 13:01:42 CEST 2006
 
  - Module::Build::Convert is now capable of doing the conversion 

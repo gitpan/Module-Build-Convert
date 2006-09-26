@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.34';
+our $VERSION = '0.35';
 
 sub new {
     my ($self, %params) = @_;
@@ -33,9 +33,6 @@ sub new {
 			          Len_Indent          => $params{Len_Indent}          || 3,
 			          DD_Indent           => $params{DD_Indent}           || 2,
 	               	          DD_Sortkeys         => $params{DD_Sortkeys}         || 1 }}, $class;
-    $obj->{Config}{Makefile_PL}     = File::Basename::basename($obj->{Config}{Makefile_PL});
-    $obj->{Config}{Build_PL}        = File::Basename::basename($obj->{Config}{Build_PL});
-    $obj->{Config}{MANIFEST}        = File::Basename::basename($obj->{Config}{MANIFEST});
     $obj->{Config}{RC}              = File::Spec->catfile(File::HomeDir::home(), $obj->{Config}{RC});
     $obj->{Config}{Build_PL_Length} = length($obj->{Config}{Build_PL});
     return $obj;
@@ -43,23 +40,39 @@ sub new {
 
 sub convert {
     my $self = shift;
-    my @dirs;
-    if ($self->{Config}{Path}) {
-        opendir(my $dh, $self->{Config}{Path}) or die "Can't open $self->{Config}{Path}\n";
-	@dirs = grep { /[\w\-]+[\d\.]+/ and -d $_ } sort readdir $dh;
-	unshift @dirs, $self->{Config}{Path} unless @dirs;
-    } else {
-        unshift @dirs, '.';
+    unless ($self->{Config}{reinit} || defined @{$self->{dirs}}) {
+        if ($self->{Config}{Path}) { 
+            opendir(my $dh, $self->{Config}{Path}) or die "Can't open $self->{Config}{Path}\n";
+	    @{$self->{dirs}} = grep { /[\w\-]+[\d\.]+/ 
+	      and -d File::Spec->catfile($self->{Config}{Path}, $_) } sort readdir $dh;
+	    unless (@{$self->{dirs}}) {
+	        unshift @{$self->{dirs}}, $self->{Config}{Path};
+		$self->{have_single_dir} = 1;
+	    }
+	} else {
+            unshift @{$self->{dirs}}, '.';
+	    $self->{have_single_dir} = 1;
+        }
     }
-    my $Makefile_PL = $self->{Config}{Makefile_PL};
-    my $Build_PL    = $self->{Config}{Build_PL};
-    my $MANIFEST    = $self->{Config}{MANIFEST};	    
-    foreach my $dir (@dirs) {
-	    $self->{Config}{Makefile_PL} = File::Spec->catfile($dir, $Makefile_PL);
-            $self->{Config}{Build_PL}    = File::Spec->catfile($dir, $Build_PL);
-	    $self->{Config}{MANIFEST}    = File::Spec->catfile($dir, $MANIFEST);    
-            
-	    if (!$self->{Config}{reinit}) {
+    my $Makefile_PL = File::Basename::basename($self->{Config}{Makefile_PL});
+    my $Build_PL    = File::Basename::basename($self->{Config}{Build_PL});
+    my $MANIFEST    = File::Basename::basename($self->{Config}{MANIFEST});
+    $self->{show_summary} = 1 if @{$self->{dirs}} > 1;
+    while (my $dir = shift @{$self->{dirs}}) {
+            unless ($self->{have_single_dir}) { 
+                $" = "\n";
+		$self->_do_verbose(<<TITLE);
+Remaining dists:
+----------------
+@{$self->{dirs}}
+TITLE
+                $self->{summary}{current_dir} = $dir;
+	    }
+	    $dir = File::Spec->catfile($self->{Config}{Path}, $dir) if !$self->{have_single_dir};
+	    $self->{Config}{Makefile_PL}  = File::Spec->catfile($dir, $Makefile_PL);
+            $self->{Config}{Build_PL}     = File::Spec->catfile($dir, $Build_PL);
+	    $self->{Config}{MANIFEST}     = File::Spec->catfile($dir, $MANIFEST);      
+	    unless ($self->{Config}{reinit}) {
 	        $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
                 $self->_exists;
                 $self->_create_rcfile if $self->{Config}{Create_RC};
@@ -72,6 +85,7 @@ sub convert {
             $self->_write;
             $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
     }
+    $self->_show_summary if $self->{show_summary};
 }
 
 sub _exists {
@@ -116,11 +130,15 @@ sub _makefile_ok {
 	    ? File::Basename::dirname($self->{Config}{Makefile_PL}) 
 	    : Cwd::cwd(), "\n";
     }
-    warn "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n"
-      and return 'skip' unless $makefile =~ /WriteMakefile\s*\(/s;
-    warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n" 
-      and $self->{Config}{Exec_Makefile} = 1
-          if $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile};
+    unless ($makefile =~ /WriteMakefile\s*\(/s) {
+        warn "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n\n";
+	push @{$self->{summary}{failed}}, $self->{summary}{current_dir};
+	return 'skip';
+    }
+    if ($makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile}) {
+        warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
+        $self->{Config}{Exec_Makefile} = 1;
+    }
 }
 
 sub _get_data {
@@ -183,12 +201,16 @@ sub _parse_data {
 
 sub _extract_args {
     my $self = shift;
+    push @{$self->{summary}{succeeded}}, $self->{summary}{current_dir};
     if ($self->{Config}{Exec_Makefile}) {
-        $self->_do_verbose("*** Executing $self->{Config}{Makefile_PL}\n");
+        $self->_do_verbose("*** Executing $self->{Config}{Makefile_PL}\n"); 
         $self->_run_makefile;
     } else {
         $self->_parse_makefile;
     }
+    $self->{Config}{Exec_Makefile} = $self->{Config}{reinit} = 0;
+    push @{$self->{summary}{$self->{Config}{Exec_Makefile} ? 'method_execute' : 'method_parse'}}, 
+	   $self->{summary}{current_dir};
 }
 
 sub _run_makefile {
@@ -354,15 +376,15 @@ DEBUG
 		    last SUBST;
 		}
             }
-	    pop @histargs until $self->{Data}{table}{$histargs[-1]};
-	    push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
+	    if (@histargs) {
+	        pop @histargs until $self->{Data}{table}{$histargs[-1]};
+	        push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
+            }
 	}
     }
     $self->_debug("*** Leaving parse\n\n",'no_wait');
     %{$self->{make_args}} = %makeargs;
 }
-
-sub _die { die }
 
 sub _read_makefile {
     my $self = shift;
@@ -684,6 +706,18 @@ sub _add_to_manifest {
         $fh->close;
 	$self->_do_verbose("*** Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
     }
+}
+
+sub _show_summary {
+    my $self = shift;      
+    $self->_do_verbose("\nSucceeded:\n"    . '-' x 10 . "\n@{$self->{summary}{succeeded}}\n\n")
+      if defined @{$self->{summary}{succeeded}};
+    $self->_do_verbose("Failed:\n"         . '-' x  7 . "\n@{$self->{summary}{failed}}\n\n")
+      if defined @{$self->{summary}{failed}};
+    $self->_do_verbose("Method: parse\n"   . '-' x 13 . "\n@{$self->{summary}{method_parse}}\n\n")
+      if defined @{$self->{summary}{method_parse}};
+    $self->_do_verbose("Method: execute\n" . '-' x 15 . "\n@{$self->{summary}{method_execute}}\n\n")
+      if defined @{$self->{summary}{method_execute}};
 }
 
 sub _do_verbose {
