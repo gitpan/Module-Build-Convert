@@ -1,5 +1,14 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.36 Tue Sep 26 16:01:19 CEST 2006
+
+ - Should a Build.PL already exist and if we're asked whether
+   we want to override it and answer no, the next distribution
+   is handled within the queue.
+   
+ - The summary does also list which distributions have been 
+   intentionally skipped.
+
 0.35 Tue Sep 26 08:52:34 CEST 2006
 
  - If we're automatically processing multiple distributions

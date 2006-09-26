@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.35';
+our $VERSION = '0.36';
 
 sub new {
     my ($self, %params) = @_;
@@ -65,6 +65,7 @@ sub convert {
 Remaining dists:
 ----------------
 @{$self->{dirs}}
+
 TITLE
                 $self->{summary}{current_dir} = $dir;
 	    }
@@ -74,7 +75,7 @@ TITLE
 	    $self->{Config}{MANIFEST}     = File::Spec->catfile($dir, $MANIFEST);      
 	    unless ($self->{Config}{reinit}) {
 	        $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
-                $self->_exists;
+                next if $self->_exists eq 'skip';
                 $self->_create_rcfile if $self->{Config}{Create_RC};
                 next if $self->_makefile_ok eq 'skip';
                 $self->_get_data;
@@ -95,8 +96,11 @@ sub _exists {
         if ($self->{Config}{Dont_Overwrite_Auto}) { 
             print ".\n";
 	    print 'Shall I overwrite it? [y/n] ';
-	    chomp(my $input = <STDIN>); 
-	    exit(1) unless $input =~ /y/i;
+	    chomp(my $input = <STDIN>);
+	    unless ($input =~ /y/i) {
+	        push @{$self->{summary}{skipped}}, $self->{summary}{current_dir};
+		return 'skip';
+	    }
 	    print "\n" if $self->{Config}{Verbose};
         } else {
             print ", continuing...\n";
@@ -712,6 +716,8 @@ sub _show_summary {
     my $self = shift;      
     $self->_do_verbose("\nSucceeded:\n"    . '-' x 10 . "\n@{$self->{summary}{succeeded}}\n\n")
       if defined @{$self->{summary}{succeeded}};
+    $self->_do_verbose("Skipped:\n"        . '-' x  8 . "\n@{$self->{summary}{skipped}}\n\n")
+      if defined @{$self->{summary}{skipped}};
     $self->_do_verbose("Failed:\n"         . '-' x  7 . "\n@{$self->{summary}{failed}}\n\n")
       if defined @{$self->{summary}{failed}};
     $self->_do_verbose("Method: parse\n"   . '-' x 13 . "\n@{$self->{summary}{method_parse}}\n\n")
