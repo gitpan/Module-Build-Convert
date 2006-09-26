@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.36';
+our $VERSION = '0.37';
 
 sub new {
     my ($self, %params) = @_;
@@ -59,32 +59,32 @@ sub convert {
     my $MANIFEST    = File::Basename::basename($self->{Config}{MANIFEST});
     $self->{show_summary} = 1 if @{$self->{dirs}} > 1;
     while (my $dir = shift @{$self->{dirs}}) {
-            unless ($self->{have_single_dir}) { 
-                $" = "\n";
-		$self->_do_verbose(<<TITLE);
+        unless ($self->{have_single_dir}) { 
+            $" = "\n";
+	    $self->_do_verbose(<<TITLE);
 Remaining dists:
 ----------------
 @{$self->{dirs}}
 
 TITLE
-                $self->{summary}{current_dir} = $dir;
-	    }
-	    $dir = File::Spec->catfile($self->{Config}{Path}, $dir) if !$self->{have_single_dir};
-	    $self->{Config}{Makefile_PL}  = File::Spec->catfile($dir, $Makefile_PL);
-            $self->{Config}{Build_PL}     = File::Spec->catfile($dir, $Build_PL);
-	    $self->{Config}{MANIFEST}     = File::Spec->catfile($dir, $MANIFEST);      
-	    unless ($self->{Config}{reinit}) {
-	        $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
-                next if $self->_exists eq 'skip';
-                $self->_create_rcfile if $self->{Config}{Create_RC};
-                next if $self->_makefile_ok eq 'skip';
-                $self->_get_data;
-            }
-            $self->_extract_args;
-            $self->_convert;
-            $self->_dump;
-            $self->_write;
-            $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
+            $self->{summary}{current_dir} = $dir;
+	}
+	$dir = File::Spec->catfile($self->{Config}{Path}, $dir) if !$self->{have_single_dir};
+	$self->{Config}{Makefile_PL}  = File::Spec->catfile($dir, $Makefile_PL);
+        $self->{Config}{Build_PL}     = File::Spec->catfile($dir, $Build_PL);
+	$self->{Config}{MANIFEST}     = File::Spec->catfile($dir, $MANIFEST);      
+	unless ($self->{Config}{reinit}) {
+	    $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
+            next if $self->_exists eq 'skip';
+            $self->_create_rcfile if $self->{Config}{Create_RC};
+            next if $self->_makefile_ok eq 'skip';
+            $self->_get_data;
+        }
+        $self->_extract_args;
+        $self->_convert;
+        $self->_dump;
+        $self->_write;
+        $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
     }
     $self->_show_summary if $self->{show_summary};
 }

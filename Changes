@@ -1,5 +1,9 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.37 Tue Sep 26 20:58:04 CEST 2006
+
+ - Fixed a few lines broken indentation.
+
 0.36 Tue Sep 26 16:01:19 CEST 2006
 
  - Should a Build.PL already exist and if we're asked whether
