@@ -1,5 +1,10 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.38 Wed Sep 27 08:45:11 CEST 2006
+
+ - Fixed some minor bug which caused an exit while the 
+   execution mode was being launched.
+
 0.37 Tue Sep 26 20:58:04 CEST 2006
 
  - Fixed a few lines broken indentation.

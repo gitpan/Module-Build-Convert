@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.37';
+our $VERSION = '0.38';
 
 sub new {
     my ($self, %params) = @_;
@@ -57,8 +57,11 @@ sub convert {
     my $Makefile_PL = File::Basename::basename($self->{Config}{Makefile_PL});
     my $Build_PL    = File::Basename::basename($self->{Config}{Build_PL});
     my $MANIFEST    = File::Basename::basename($self->{Config}{MANIFEST});
+    push @{$self->{dirs}}, $self->{current_dir} 
+      if @{$self->{dirs}} == 0 and $self->{Config}{reinit};
     $self->{show_summary} = 1 if @{$self->{dirs}} > 1;
-    while (my $dir = shift @{$self->{dirs}}) {
+    while (my $dir = shift @{$self->{dirs}} ) {
+        $self->{current_dir} = $dir;
         unless ($self->{have_single_dir}) { 
             $" = "\n";
 	    $self->_do_verbose(<<TITLE);
@@ -67,17 +70,17 @@ Remaining dists:
 @{$self->{dirs}}
 
 TITLE
-            $self->{summary}{current_dir} = $dir;
 	}
 	$dir = File::Spec->catfile($self->{Config}{Path}, $dir) if !$self->{have_single_dir};
 	$self->{Config}{Makefile_PL}  = File::Spec->catfile($dir, $Makefile_PL);
         $self->{Config}{Build_PL}     = File::Spec->catfile($dir, $Build_PL);
 	$self->{Config}{MANIFEST}     = File::Spec->catfile($dir, $MANIFEST);      
 	unless ($self->{Config}{reinit}) {
+	    no warnings 'uninitialized';
 	    $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
-            next if $self->_exists eq 'skip';
+	    next if !$self->_exists;
             $self->_create_rcfile if $self->{Config}{Create_RC};
-            next if $self->_makefile_ok eq 'skip';
+            next if !$self->_makefile_ok;
             $self->_get_data;
         }
         $self->_extract_args;
@@ -98,14 +101,15 @@ sub _exists {
 	    print 'Shall I overwrite it? [y/n] ';
 	    chomp(my $input = <STDIN>);
 	    unless ($input =~ /y/i) {
-	        push @{$self->{summary}{skipped}}, $self->{summary}{current_dir};
-		return 'skip';
+	        push @{$self->{summary}{skipped}}, $self->{current_dir};
+		return 0;
 	    }
 	    print "\n" if $self->{Config}{Verbose};
         } else {
             print ", continuing...\n";
         }
     }
+    return 1;
 }
 
 sub _create_rcfile {
@@ -136,13 +140,14 @@ sub _makefile_ok {
     }
     unless ($makefile =~ /WriteMakefile\s*\(/s) {
         warn "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n\n";
-	push @{$self->{summary}{failed}}, $self->{summary}{current_dir};
-	return 'skip';
+	push @{$self->{summary}{failed}}, $self->{current_dir};
+	return 0;
     }
     if ($makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile}) {
         warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
         $self->{Config}{Exec_Makefile} = 1;
     }
+    return 1;
 }
 
 sub _get_data {
@@ -205,7 +210,7 @@ sub _parse_data {
 
 sub _extract_args {
     my $self = shift;
-    push @{$self->{summary}{succeeded}}, $self->{summary}{current_dir};
+    push @{$self->{summary}{succeeded}}, $self->{current_dir};
     if ($self->{Config}{Exec_Makefile}) {
         $self->_do_verbose("*** Executing $self->{Config}{Makefile_PL}\n"); 
         $self->_run_makefile;
@@ -214,7 +219,7 @@ sub _extract_args {
     }
     $self->{Config}{Exec_Makefile} = $self->{Config}{reinit} = 0;
     push @{$self->{summary}{$self->{Config}{Exec_Makefile} ? 'method_execute' : 'method_parse'}}, 
-	   $self->{summary}{current_dir};
+	   $self->{current_dir};
 }
 
 sub _run_makefile {
@@ -259,9 +264,9 @@ sub _parse_makefile {
                             \s* 
                             ['"]? (\w+) ['"]? 
 			    \s* => \s* [^ \{ \[ ]
-			    ['"]? ([\$ \@ \% \< \>\\ \/ \- \: \. \w]+ .*?) ['"]?
+			    ['"]? ([\$ \@ \% \< \>\\ \/ \- \: \. \w]+.*?) ['"]?
 			    (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
-                       /x;
+                       /sx;
     my $found_array  = qr/^ 
                             \s*
                             ['"]? (\w+) ['"]?
@@ -359,13 +364,15 @@ DEBUG
 		$debug_desc = 'unknown';
                 $makecode = $1;
             }
-	    $trapped_loop{$makecode}++;
-	    if ($trapped_loop{$makecode} >= 2) {
+	    no warnings 'uninitialized';
+	    $trapped_loop{$makecode}++ if $makecode eq $self->{makefile_prev};
+	    if ($trapped_loop{$makecode} >= 1) {
 	        $self->{Config}{Exec_Makefile} = 1;
 	        $self->{Config}{reinit} = 1;
 	    	$self->convert;
 	    	exit;
 	    }
+	    $self->{makefile_prev} = $makecode;
 	    $self->_debug(<<DEBUG);
 Found code &
 ++++++++++++
