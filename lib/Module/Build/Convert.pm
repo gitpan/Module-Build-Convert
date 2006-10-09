@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 sub new {
     my ($self, %params) = @_;
@@ -586,6 +586,10 @@ sub _compose_header {
     if (defined($self->{make_code}{begin})) {
         $self->_do_verbose("*** Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
+	while ($self->{make_code}{begin} =~ /(?:prompt|Verbose)\s*\(/) {
+	    $self->{make_code}{begin} =~ s/^.*(prompt|Verbose)\s*\(.*?\);$//m;
+	    $self->_do_verbose("*** Removing $1".'()'." from the code\n");
+	} 
 	if ($self->{make_code}{begin} =~ /Module::Build::Compat/) {
 	    $self->_do_verbose("*** Removing Module::Build::Compat Note\n");
 	    $self->{make_code}{begin} =~ s/^\#.*Module::Build::Compat.*?\n//s;

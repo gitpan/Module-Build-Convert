@@ -1,5 +1,11 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.39 Fri Okt  6 20:29:03 CEST 2006
+
+ - Occurences of the functions prompt()/Verbose() which are 
+   exported by ExtUtils::MakeMaker by default are removed 
+   from the code written to the Build.PL.
+
 0.38 Wed Sep 27 08:45:11 CEST 2006
 
  - Fixed some minor bug which caused an exit while the 
