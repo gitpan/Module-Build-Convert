@@ -1,5 +1,11 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.40 Tue Okt 10 18:15:37 CEST 2006
+
+ - prompt()/Verbose() within the input code read from Makefile.PL
+   are while converting substituted by Module::Build equivalents.
+   [Claes Jakobsson, claes@surfar.nu]
+
 0.39 Fri Okt  6 20:29:03 CEST 2006
 
  - Occurences of the functions prompt()/Verbose() which are 

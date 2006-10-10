@@ -2,7 +2,7 @@ package Module::Build::Convert;
 
 use 5.005;
 use strict;
-use warnings; 
+use warnings;
 
 use Carp ();
 use Cwd ();
@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.39';
+our $VERSION = '0.41';
 
 sub new {
     my ($self, %params) = @_;
@@ -586,9 +586,14 @@ sub _compose_header {
     if (defined($self->{make_code}{begin})) {
         $self->_do_verbose("*** Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
-	while ($self->{make_code}{begin} =~ /(?:prompt|Verbose)\s*\(/) {
-	    $self->{make_code}{begin} =~ s/^.*(prompt|Verbose)\s*\(.*?\);$//m;
-	    $self->_do_verbose("*** Removing $1".'()'." from the code\n");
+	if ($self->{make_code}{begin} =~ /(?:prompt|Verbose)\s*\(/s) {
+	    my $regexp = qr/^(.*?)(prompt|Verbose)\s*?\(['"](.*)['"]\);$/;
+	    for my $var (['make_code','begin'],['make_code','end']) {
+	        while ($self->{$var->[0]}{$var->[1]} =~ /$regexp/m) {
+	            my $replace = $1 . 'Module::Build->' . $2 . '("' . $3 . '")';
+	            $self->{$var->[0]}{$var->[1]} =~ s/$regexp/$replace/m;
+	        }
+	    }
 	} 
 	if ($self->{make_code}{begin} =~ /Module::Build::Compat/) {
 	    $self->_do_verbose("*** Removing Module::Build::Compat Note\n");
