@@ -1,12 +1,22 @@
 Revision history for Perl extension Module::Build::Convert.
 
-0.40 Tue Okt 10 18:15:37 CEST 2006
+0.42 Thu Oct 12 15:22:53 CEST 2006
+
+ - Fixed a missing semicolon which is now the trailing end 
+   of the substituted prompt()/Verbose() functions.
+
+0.41 Tue Oct 10 21:04:54 CEST 2006
+
+ - The Makefile.PL has been unintentional excluded from the 
+   tarball written which is fixed now. 
+
+0.40 Tue Oct 10 18:15:37 CEST 2006
 
  - prompt()/Verbose() within the input code read from Makefile.PL
    are while converting substituted by Module::Build equivalents.
    [Claes Jakobsson, claes@surfar.nu]
 
-0.39 Fri Okt  6 20:29:03 CEST 2006
+0.39 Fri Oct  6 20:29:03 CEST 2006
 
  - Occurences of the functions prompt()/Verbose() which are 
    exported by ExtUtils::MakeMaker by default are removed 
