@@ -2,14 +2,14 @@ NAME
     Module::Build::Convert - Makefile.PL to Build.PL converter
 
 SYNOPSIS
-     use Module::Build::Convert; 
+     use Module::Build::Convert;
 
      my %params = (Path => '/path/to/perl/distribution(s)',
                    Verbose => 2,
                    Use_Native_Order => 1,
                    Len_Indent => 4);
 
-     my $make = Module::Build::Convert->new(%params);                            
+     my $make = Module::Build::Convert->new(%params);
      $make->convert;
 
 DESCRIPTION

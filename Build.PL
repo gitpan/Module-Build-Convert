@@ -14,24 +14,24 @@ my $build = Module::Build->new
    requires => { 
                  'Carp' => 0,
                  'Cwd' => 0, 
-		 'Data::Dumper' => 0,
-		 'ExtUtils::MakeMaker' => 0,
-		 'File::Basename' => 0,
-		 'File::HomeDir' => 0,
-		 'File::Slurp' => 0,
-		 'File::Spec' => 0,
-		 'Getopt::Long' => 0,
-		 'IO::File' => 0,
+                 'Data::Dumper' => 0,
+                 'ExtUtils::MakeMaker' => 0,
+                 'File::Basename' => 0,
+                 'File::HomeDir' => 0,
+                 'File::Slurp' => 0,
+                 'File::Spec' => 0,
+                 'Getopt::Long' => 0,
+                 'IO::File' => 0,
                },
-   build_requires => { 'Test::More' => 0 },	       
+   build_requires => { 'Test::More' => 0 },
    recommends => {
                    'Test::Pod' => '1.14',
-		   'Test::Pod::Coverage' => '1.04',
-		 },
+                   'Test::Pod::Coverage' => '1.04',
+                 },
    script_files => [ 'scripts/make2build' ],
    license => 'perl',
    create_readme => 1,
    create_makefile_pl => 'traditional',
   );
-  
+
 $build->create_build_script;

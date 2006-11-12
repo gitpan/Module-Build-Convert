@@ -10,27 +10,27 @@ my $make = Module::Build::Convert->new;
 
 my %makeargs = (NAME           => 'SCALAR',
                 DISTNAME       => 'SCALAR',
-	        ABSTRACT       => 'SCALAR',
-	        AUTHOR         => 'SCALAR',
-	        VERSION        => 'SCALAR',
-	        VERSION_FROM   => 'SCALAR',
-	        PREREQ_PM      => 'HASH',
-	        PL_FILES       => 'HASH',
-	        PM             => 'HASH',
-	        MAN1PODS       => 'HASH',
-	        XS             => 'HASH',
-	        INC            => 'SCALAR',
-	        INSTALLDIRS    => 'SCALAR',
-	        DESTDIR        => 'SCALAR',
-	        CCFLAGS        => 'SCALAR',
-	        EXTRA_META     => 'SCALAR',
-	        SIGN           => 'SCALAR',
-	        LICENSE        => 'SCALAR',
-	       'clean.FILES'   => 'ARRAY');
+                ABSTRACT       => 'SCALAR',
+                AUTHOR         => 'SCALAR',
+                VERSION        => 'SCALAR',
+                VERSION_FROM   => 'SCALAR',
+                PREREQ_PM      => 'HASH',
+                PL_FILES       => 'HASH',
+                PM             => 'HASH',
+                MAN1PODS       => 'HASH',
+                XS             => 'HASH',
+                INC            => 'SCALAR',
+                INSTALLDIRS    => 'SCALAR',
+                DESTDIR        => 'SCALAR',
+                CCFLAGS        => 'SCALAR',
+                EXTRA_META     => 'SCALAR',
+                SIGN           => 'SCALAR',
+                LICENSE        => 'SCALAR',
+                'clean.FILES'   => 'ARRAY');
 
 my %resolve = (SCALAR => '',
                ARRAY  => [],
-	       HASH   => {});
+               HASH   => {});
 
 while (my ($arg, $type) = each %makeargs) {
     $make->{make_args}{$arg} = $resolve{$type};
@@ -68,9 +68,9 @@ foreach (@{$make->{build_args}}) {
     my $testmsg = $table{$buildarg} 
       ? "$table{$buildarg} => $buildarg" 
       : "$buildarg is a default argument";
-    
+
     is (exists $table{$buildarg}, 1, $testmsg);
-    
+
     if (ref $type eq 'ARRAY' || ref $type eq 'HASH') {
         is (ref $type, $makeargs{$makearg}, "$buildarg is of type " . ref $type);
     } else {
