@@ -1,5 +1,12 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.44 Sat Nov 18 20:01:50 CET 2006
+
+ - Added whitespace where necessary.
+
+ - make2build accepts the specification of the Makefile.PL
+   filename as commandline argument. [Mario Iseli, admin@marioiseli.com]
+
 0.43 Mon Nov 13 00:27:16 CET 2006
 
  - Commandline switch -x has become -e.

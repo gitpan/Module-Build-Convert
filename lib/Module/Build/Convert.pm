@@ -14,11 +14,12 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.43';
+our $VERSION = '0.44';
 
 sub new {
     my ($self, %params) = @_;
     my $class = ref($self) || $self;
+
     my $obj = bless { Config => { Path                => $params{Path}                || '',
                                   Makefile_PL         => $params{Makefile_PL}         || 'Makefile.PL',
                                   Build_PL            => $params{Build_PL}            || 'Build.PL',
@@ -33,18 +34,28 @@ sub new {
                                   Len_Indent          => $params{Len_Indent}          || 3,
                                   DD_Indent           => $params{DD_Indent}           || 2,
                                   DD_Sortkeys         => $params{DD_Sortkeys}         || 1 }}, $class;
+
     $obj->{Config}{RC}              = File::Spec->catfile(File::HomeDir::home(), $obj->{Config}{RC});
     $obj->{Config}{Build_PL_Length} = length($obj->{Config}{Build_PL});
+
     return $obj;
 }
 
 sub convert {
     my $self = shift;
+
     unless ($self->{Config}{reinit} || defined @{$self->{dirs}}) {
         if ($self->{Config}{Path}) {
+            my ($basename, $dirname) = File::Basename::fileparse($self->{Config}{Path});
+            if (-f $self->{Config}{Path}) {
+                $self->{Config}{Makefile_PL} = $basename;
+                $self->{Config}{Path}        = $dirname;
+            }
+
             opendir(my $dh, $self->{Config}{Path}) or die "Can't open $self->{Config}{Path}\n";
             @{$self->{dirs}} = grep { /[\w\-]+[\d\.]+/
               and -d File::Spec->catfile($self->{Config}{Path}, $_) } sort readdir $dh;
+
             unless (@{$self->{dirs}}) {
                 unshift @{$self->{dirs}}, $self->{Config}{Path};
                 $self->{have_single_dir} = 1;
@@ -57,11 +68,15 @@ sub convert {
     my $Makefile_PL = File::Basename::basename($self->{Config}{Makefile_PL});
     my $Build_PL    = File::Basename::basename($self->{Config}{Build_PL});
     my $MANIFEST    = File::Basename::basename($self->{Config}{MANIFEST});
+
     push @{$self->{dirs}}, $self->{current_dir} 
       if @{$self->{dirs}} == 0 and $self->{Config}{reinit};
+
     $self->{show_summary} = 1 if @{$self->{dirs}} > 1;
+
     while (my $dir = shift @{$self->{dirs}} ) {
         $self->{current_dir} = $dir;
+
         unless ($self->{have_single_dir}) { 
             $" = "\n";
             $self->_do_verbose(<<TITLE);
@@ -75,6 +90,7 @@ TITLE
         $self->{Config}{Makefile_PL} = File::Spec->catfile($dir, $Makefile_PL);
         $self->{Config}{Build_PL}    = File::Spec->catfile($dir, $Build_PL);
         $self->{Config}{MANIFEST}    = File::Spec->catfile($dir, $MANIFEST);
+
         unless ($self->{Config}{reinit}) {
             no warnings 'uninitialized';
             $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
@@ -94,12 +110,15 @@ TITLE
 
 sub _exists {
     my $self = shift;
+
     if (-e $self->{Config}{Build_PL}) {
         print 'A Build.PL exists already';
+
         if ($self->{Config}{Dont_Overwrite_Auto}) { 
             print ".\n";
             print 'Shall I overwrite it? [y/n] ';
             chomp(my $input = <STDIN>);
+
             unless ($input =~ /y/i) {
                 push @{$self->{summary}{skipped}}, $self->{current_dir};
                 return 0;
@@ -109,12 +128,15 @@ sub _exists {
             print ", continuing...\n";
         }
     }
+
     return 1;
 }
 
 sub _create_rcfile {
     my $self = shift;
+
     my $rcfile = $self->{Config}{RC};
+
     if (-e $rcfile && !-z $rcfile && File::Slurp::read_file($rcfile) =~ /\w+/) {
         die "$rcfile exists\n";
     } else {
@@ -129,7 +151,9 @@ sub _create_rcfile {
 
 sub _makefile_ok {
     my $self = shift;
+
     my $makefile;
+
     if (-e $self->{Config}{Makefile_PL}) {
         $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
     } else {
@@ -138,15 +162,18 @@ sub _makefile_ok {
             ? File::Basename::dirname($self->{Config}{Makefile_PL}) 
             : Cwd::cwd(), "\n";
     }
+
     unless ($makefile =~ /WriteMakefile\s*\(/s) {
         warn "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n\n";
         push @{$self->{summary}{failed}}, $self->{current_dir};
         return 0;
     }
+
     if ($makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile}) {
         warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
         $self->{Config}{Exec_Makefile} = 1;
     }
+
     return 1;
 }
 
@@ -178,8 +205,10 @@ sub _get_data {
 sub _parse_data {
     my $self = shift;
     my $create_rc = 1 if (shift || 'undef') eq 'create_rc';
+
     my ($data, @data_parsed);
     my $rcfile = $self->{Config}{RC};
+
     if (-e $rcfile && !-z $rcfile && File::Slurp::read_file($rcfile) =~ /\w+/) {
         $data = File::Slurp::read_file($rcfile);
     } else {
@@ -187,36 +216,45 @@ sub _parse_data {
         $data = <DATA>;
         chomp($data);
     }
+
     unless ($create_rc) {
         @data_parsed = do {               #  # description
             split /#\s+.*\s+?-\n/, $data; #  -
         };
     }
+
     unless ($create_rc) {
         # superfluosity
         shift @data_parsed;
         chomp($data_parsed[-1]);
+ 
         foreach my $line (split /\n/, $data_parsed[0]) {
             next unless $line;
+
             if ($line =~ /^#/) {
                 my ($arg) = split /\s+/, $line;
                 $self->{disabled}{substr($arg, 1)} = 1;
             }
         }
+
         @data_parsed = map { 1 while s/^#.*?\n(.*)$/$1/gs; $_ } @data_parsed;
     }
+
     return $create_rc ? $data : @data_parsed;
 }
 
 sub _extract_args {
     my $self = shift;
+
     push @{$self->{summary}{succeeded}}, $self->{current_dir};
+
     if ($self->{Config}{Exec_Makefile}) {
         $self->_do_verbose("*** Executing $self->{Config}{Makefile_PL}\n"); 
         $self->_run_makefile;
     } else {
         $self->_parse_makefile;
     }
+
     $self->{Config}{Exec_Makefile} = $self->{Config}{reinit} = 0;
     push @{$self->{summary}{$self->{Config}{Exec_Makefile} ? 'method_execute' : 'method_parse'}}, 
            $self->{current_dir};
@@ -225,9 +263,11 @@ sub _extract_args {
 sub _run_makefile {
     my $self = shift;
     no warnings 'redefine';
+
     *ExtUtils::MakeMaker::WriteMakefile = sub {
       %{$self->{make_args}} = @{$self->{make_args_arr}} = @_;
     };
+
     # beware, do '' overwrites existing globals
     $self->_save_globals;
     do $self->{Config}{Makefile_PL};
@@ -237,11 +277,14 @@ sub _run_makefile {
 sub _save_globals {
     my $self = shift;
     my @vars;
+
     my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
     $makefile =~ s/.*WriteMakefile\(\s*?(.*?)\);.*/$1/s;
+
     while ($makefile =~ s/\$(\w+)//) {
         push @vars, $1 if defined(${$1});
     }
+
     no strict 'refs';
     foreach my $var (@vars) {
         ${__PACKAGE__.'::globals'}{$var} = ${$var};
@@ -251,6 +294,7 @@ sub _save_globals {
 sub _restore_globals {
     my $self = shift;
     no strict 'refs';
+
     while (my ($var, $value) = each %{__PACKAGE__.'::globals'}) {
         ${__PACKAGE__.'::'.$var} = $value;
     }
@@ -260,6 +304,7 @@ sub _restore_globals {
 sub _parse_makefile {
     my $self = shift;
     my (@histargs, %makeargs, $makefile, %trapped_loop);
+
     my $found_string = qr/^
                             \s* 
                             ['"]? (\w+) ['"]?
@@ -281,8 +326,10 @@ sub _parse_makefile {
                             \{ \s* (.*?) \s*? \}
                             (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
                        /sx;
+
     ($makefile, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
     $self->_debug("*** Entering parse\n\n",'no_wait');
+
     while ($makefile) {
         if ($makefile =~ s/$found_string//) {
             my ($arg, $value, $comment) = ($1,$2,$3);
@@ -290,9 +337,11 @@ sub _parse_makefile {
             $value =~ tr/['"]//d;
             $makeargs{$arg} = $value;
             push @histargs, $arg;
+
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
             }
+
             $self->_debug(<<DEBUG);
 Found string ''
 +++++++++++++++
@@ -308,9 +357,11 @@ DEBUG
             $comment ||= '';
             $makeargs{$arg} = [ map { tr/['",]//d; $_ } split /,\s*/, $values ];
             push @histargs, $arg;
+
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
             }
+
             $self->_debug(<<DEBUG);
 Found array []
 ++++++++++++++
@@ -326,12 +377,15 @@ DEBUG
             $comment ||= '';
             my @values_debug = split /,\s*/, $values;
             my @values;
+
             foreach my $value (@values_debug) {
                 push @values, map { tr/['",]//d; $_ } split /\s*=>\s*/, $value;
             }
+
             @values_debug = map { "$_\n        " } @values_debug;
             $makeargs{$arg} = { @values };
             push @histargs, $arg;
+
             if (defined($comment) && defined($self->{Data}{table}{$arg})) {
                 $self->{make_comments}{$self->{Data}{table}{$arg}} = $comment;
             }
@@ -347,6 +401,7 @@ $makefile
 DEBUG
         } else {
             my ($debug_desc, $makecode);
+
             if ($makefile =~ s/^\s*(\#.*\s*(?:=>\s*['"]?\w*['"]?))?,?\n//s) {
                 $debug_desc = 'comment';
                 $makecode = $1;
@@ -364,14 +419,17 @@ DEBUG
                 $debug_desc = 'unknown';
                 $makecode = $1;
             }
+
             no warnings 'uninitialized';
             $trapped_loop{$makecode}++ if $makecode eq $self->{makefile_prev};
+
             if ($trapped_loop{$makecode} >= 1) {
                 $self->{Config}{Exec_Makefile} = 1;
                 $self->{Config}{reinit} = 1;
                 $self->convert;
                 exit;
             }
+
             $self->{makefile_prev} = $makecode;
             $self->_debug(<<DEBUG);
 Found code &
@@ -387,6 +445,7 @@ DEBUG
                     last SUBST;
                 }
             }
+
             if (@histargs) {
                 pop @histargs until $self->{Data}{table}{$histargs[-1]};
                 push @{$self->{make_code}{$self->{Data}{table}{$histargs[-1]}}}, $makecode;
@@ -399,18 +458,22 @@ DEBUG
 
 sub _read_makefile {
     my $self = shift;
+
     my $makefile = File::Slurp::read_file($self->{Config}{Makefile_PL});
     $makefile =~ s/^(.*)\&?WriteMakefile\s*?\(\s*(.*?)\s*\)\s*?;(.*)$/$2/s;
+
     my $makecode_begin = $1;
     my $makecode_end   = $3;
-    $makecode_begin =~ s/\s*([\#\w]+.*)\s*/$1/s;
-    $makecode_end   =~ s/\s*([\#\w]+.*)\s*/$1/s;
+    $makecode_begin    =~ s/\s*([\#\w]+.*)\s*/$1/s;
+    $makecode_end      =~ s/\s*([\#\w]+.*)\s*/$1/s;
+
     return ($makefile, $makecode_begin, $makecode_end);
 }
 
 sub _convert {
     my $self = shift;
-    $self->_insert_args; 
+    $self->_insert_args;
+
     foreach my $arg (keys %{$self->{make_args}}) {
         if ($self->{disabled}{$arg}) {
             $self->_do_verbose("*** $arg disabled, skipping\n");
@@ -466,17 +529,22 @@ sub _convert {
 
 sub _insert_args {
     my ($self, $make) = @_;
+
     my @insert_args;
     my %build = map { $self->{Data}{table}{$_} => $_ } keys %{$self->{Data}{table}};
+
     while (my ($arg, $value) = each %{$self->{Data}{default_args}}) {
         no warnings 'uninitialized';
+
         if (exists $self->{make_args}{$build{$arg}}) {
             $self->_do_verbose("*** Overriding default \'$arg => $value\'\n");
             next;
         }
+
         $value = {} if $value eq 'HASH';
         $value = [] if $value eq 'ARRAY';
         $value = '' if $value eq 'SCALAR' && $value !~ /\d+/;
+
         push @insert_args, { $arg => $value };
     }
     @{$self->{build_args}} = @insert_args;
@@ -485,6 +553,7 @@ sub _insert_args {
 sub _iterator {
     my ($build, $make) = (shift, shift);
     my @queue = @_;
+
     return sub {
         my $key = shift @queue || return;
         return $build->{$key}, $make->{$key};
@@ -493,9 +562,12 @@ sub _iterator {
 
 sub _sort_args {
     my $self = shift;
+
     my %native_sortorder;
+
     if ($self->{Config}{Use_Native_Order}) {
         no warnings 'uninitialized';
+
         for (my ($i,$s) = 0; $s < @{$self->{make_args_arr}}; $s++) {
             next unless $s % 2 == 0;
             $native_sortorder{$self->{Data}{table}{$self->{make_args_arr}[$s]}} = $i
@@ -511,6 +583,7 @@ sub _sort_args {
         my $i = 0;
         if ($self->{Config}{Use_Native_Order}) {
             my %slot;
+
             foreach my $arg (grep $have_args{$_}, @{$self->{Data}{sort_order}}) {
                 if ($native_sortorder{$arg}) {
                     $sortorder{$arg} = $native_sortorder{$arg};
@@ -520,8 +593,10 @@ sub _sort_args {
                     $sortorder{$arg} = $i++;
                 }
             }
+
             my @args = sort { $sortorder{$a} <=> $sortorder{$b} } keys %sortorder;
             $i = 0; %sortorder = map { $_ => $i++ } @args;
+
         } else {
             %sortorder = map {
               $_ => $i++
@@ -530,13 +605,17 @@ sub _sort_args {
     }
     my ($is_sorted, @unsorted);
     do {
+
         $is_sorted = 1;
-          SORT: for (my $i = 0; $i < @{$self->{build_args}}; $i++) {   
+
+          SORT: for (my $i = 0; $i < @{$self->{build_args}}; $i++) {
               my ($arg) = keys %{$self->{build_args}[$i]};
+
               unless (exists $sortorder{$arg}) {
                   push @unsorted, splice(@{$self->{build_args}}, $i, 1);
                   next;
               }
+
               if ($i != $sortorder{$arg}) {
                   $is_sorted = 0;
                   # Move element $i to pos $sortorder{$arg}
@@ -549,45 +628,59 @@ sub _sort_args {
               }
           }
     } until ($is_sorted);
+
     push @{$self->{build_args}}, @unsorted;
 }
 
 sub _dump {
     my $self = shift;
+
     $Data::Dumper::Indent    = $self->{Config}{DD_Indent} || 2;
     $Data::Dumper::Quotekeys = 0;
     $Data::Dumper::Sortkeys  = $self->{Config}{DD_Sortkeys};
     $Data::Dumper::Terse     = 1;
+
     my $d = Data::Dumper->new(\@{$self->{build_args}});
+
     $self->{buildargs_dumped} = [ $d->Dump ];
 }
 
 sub _write { 
     my $self = shift;
+
     $self->{INDENT} = ' ' x $self->{Config}{Len_Indent};
+
     no warnings 'once';
     my $fh = IO::File->new(">$self->{Config}{Build_PL}") 
       or die "Can't open $self->{Config}{Build_PL}: $!\n";
+
     my $selold = select($fh);
+
     $self->_compose_header;
     $self->_write_begin;
     $self->_write_args;
     $self->_write_end;
     $fh->close;
+
     select($selold);
+
     $self->_do_verbose("\n*** Conversion done\n\n");
 }
 
 sub _compose_header {
     my $self = shift;
+
     my ($comments_header, $code_header) = ('','');
     my $note = '# Note: this file has been initially generated by ' . __PACKAGE__ . " $VERSION";
     my $pragmas = "use strict;\nuse warnings;\n";
+
     if (defined($self->{make_code}{begin})) {
         $self->_do_verbose("*** Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
+
         if ($self->{make_code}{begin} =~ /(?:prompt|Verbose)\s*\(/s) {
             my $regexp = qr/^(.*?=\s*)(prompt|Verbose)\s*?\(['"](.*)['"]\);$/;
+
             for my $var (qw(begin end)) {
                 while ($self->{make_code}{$var} =~ /$regexp/m) {
                     my $replace = $1 . 'Module::Build->' . $2 . '("' . $3 . '");';
@@ -606,20 +699,24 @@ sub _compose_header {
             $comments_header .= $1;
         }
         chomp($comments_header);
+
         while ($self->{make_code}{begin} =~ /(?:use|require)\s+.*?;/) {
             $self->{make_code}{begin} =~ s/^\n?(.*?;)//s;
             $code_header .= "$1\n";
         }
         $self->_do_verbose("*** Adding use strict & use warnings pragmas\n");
+
         if ($code_header =~ /(?:use|require)\s+\d\.[\d_]*\s*;/) { 
             $code_header =~ s/([ \t]*(?:use|require)\s+\d\.[\d_]*\s*;\n)(.*)/$1$pragmas$2/;
         } else {
             $code_header = $pragmas . $code_header;
         }
         chomp($code_header);
+
         1 while $self->{make_code}{begin} =~ s/^\n//;
         chomp($self->{make_code}{begin}) while $self->{make_code}{begin} =~ /\n$/s;
     }
+
     $self->{Data}{begin} = $comments_header || $code_header
       ? ($comments_header  =~ /\w/ ? "$comments_header\n" : '') . "$note\n" .
         ($code_header =~ /\w/ ? "\n$code_header\n\n" : "\n") .
@@ -629,46 +726,60 @@ sub _compose_header {
 
 sub _write_begin {
     my $self = shift;
+
     my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT})-1);
+
     $self->_subst_makecode('begin');
     $self->{Data}{begin} =~ s/(\$INDENT)/$1/eego;
     $self->_do_verbose("\n", File::Basename::basename($self->{Config}{Build_PL}), " written:\n", 2);
     $self->_do_verbose('=' x ($self->{Config}{Build_PL_Length} + 9), "\n", 2);
     $self->_do_verbose($self->{Data}{begin}, 2);
+
     print $self->{Data}{begin};
 }
 
 sub _write_args {
     my $self = shift;
+
     my $arg;
     my $regex = '$chunk =~ /=> \{/';
+
     foreach my $chunk (@{$self->{buildargs_dumped}}) {
         # Hash/Array output
         if ($chunk =~ /=> [\{\[]/) {
+
             # Remove redundant parentheses
             $chunk =~ s/^\{.*?\n(.*(?{eval $regex ? '\}' : '\]'}))\s+\}\s+$/$1/os;
             Carp::croak $@ if $@;
+
             # One element per each line
             my @lines;
             push @lines, $1 while $chunk =~ s/^(.*?\n)(.*)$/$2/s;
+
             # Gather whitespace up to hash key in order
             # to recreate native Dump() indentation.
             my ($whitespace) = $lines[0] =~ /^(\s+)(\w+)/;
             $arg = $2;
             my $shorten = length($whitespace);
+
             foreach (my $i = 0; $i < @lines; $i++) {
                 my $line = $lines[$i];
                 chomp($line);
                 # Remove additional whitespace
                 $line =~ s/^\s{$shorten}(.*)$/$1/o;
+
                 # Quote sub hash keys
                 $line =~ s/^(\s+)([\w:]+)/$1'$2'/ if $line =~ /^\s+/;
+
                 # Add comma where appropriate (version numbers, parentheses)
                 $line .= ',' if $line =~ /[\d+\}\]]$/;
+
                 $line =~ s/'(\d|\$\w+)'/$1/g;
+
                 my $output = "$self->{INDENT}$line";
                 $output .= ($i == $#lines && defined($self->{make_comments}{$arg}))
-                  ? "$self->{make_comments}{$arg}\n" : "\n"; 
+                  ? "$self->{make_comments}{$arg}\n" : "\n";
+
                 $self->_do_verbose($output, 2);
                 print $output;
             }
@@ -676,17 +787,23 @@ sub _write_args {
             chomp($chunk);
             # Remove redundant parentheses
             $chunk =~ s/^\{\s+(.*?)\s+\}$/$1/s;
+
             $chunk =~ s/'(\d|\$\w+)'/$1/g;
             ($arg) = $chunk =~ /^\s*(\w+)/;
+
             my $output = "$self->{INDENT}$chunk,";
             $output .= $self->{make_comments}{$arg} if defined($self->{make_comments}{$arg});
+
             $self->_do_verbose("$output\n", 2);
             print "$output\n";
         }
+
         no warnings 'uninitialized';
+
         if ($self->{make_code}{$arg}) {
             foreach my $line (@{$self->{make_code}{$arg}}) {
                 $line .= ',' unless $line =~ /^\#/;
+
                 $self->_do_verbose("$self->{INDENT}$line\n", 2);
                 print "$self->{INDENT}$line\n";
             }
@@ -696,16 +813,21 @@ sub _write_args {
 
 sub _write_end {
     my $self = shift;
+
     my $INDENT = substr($self->{INDENT}, 0, length($self->{INDENT})-1);
+
     $self->_subst_makecode('end');
     $self->{Data}{end} =~ s/(\$INDENT)/$1/eego;
     $self->_do_verbose($self->{Data}{end}, 2);
+
     print $self->{Data}{end};
 }
 
 sub _subst_makecode {
     my ($self, $section) = @_;
+
     $self->{make_code}{$section} ||= '';
+
     $self->{make_code}{$section} =~ /\w/
       ? $self->{Data}{$section} =~ s/\$MAKECODE/$self->{make_code}{$section}/o
       : $self->{Data}{$section} =~ s/\n\$MAKECODE\n//o;
@@ -713,38 +835,50 @@ sub _subst_makecode {
 
 sub _add_to_manifest {
     my $self = shift;
+
     my $fh = IO::File->new("<$self->{Config}{MANIFEST}") 
       or die "Can't open $self->{Config}{MANIFEST}: $!\n";
     my @manifest = <$fh>;
     $fh->close;
+
     my $build_pl = File::Basename::basename($self->{Config}{Build_PL});
+
     unless (grep { $_ =~ /^$build_pl\s+$/o } @manifest) {
         unshift @manifest, "$build_pl\n";
+
         $fh = IO::File->new(">$self->{Config}{MANIFEST}")
           or die "Can't open $self->{Config}{MANIFEST}: $!\n";
         print $fh sort @manifest;
         $fh->close;
+
         $self->_do_verbose("*** Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
     }
 }
 
 sub _show_summary {
     my $self = shift;
+
     $self->_do_verbose("\nSucceeded:\n"    . '-' x 10 . "\n@{$self->{summary}{succeeded}}\n\n")
       if defined @{$self->{summary}{succeeded}};
+
     $self->_do_verbose("Skipped:\n"        . '-' x  8 . "\n@{$self->{summary}{skipped}}\n\n")
       if defined @{$self->{summary}{skipped}};
+
     $self->_do_verbose("Failed:\n"         . '-' x  7 . "\n@{$self->{summary}{failed}}\n\n")
       if defined @{$self->{summary}{failed}};
+
     $self->_do_verbose("Method: parse\n"   . '-' x 13 . "\n@{$self->{summary}{method_parse}}\n\n")
       if defined @{$self->{summary}{method_parse}};
+
     $self->_do_verbose("Method: execute\n" . '-' x 15 . "\n@{$self->{summary}{method_execute}}\n\n")
       if defined @{$self->{summary}{method_execute}};
 }
 
 sub _do_verbose {
     my $self = shift;
+
     my $level = $_[-1] =~ /^\d$/ ? pop : 1;
+
     if (($self->{Config}{Verbose} && $level == 1)
       || ($self->{Config}{Verbose} == 2 && $level == 2)) {
         print STDOUT @_;
@@ -752,12 +886,14 @@ sub _do_verbose {
 }
 
 sub _debug {
-    my $self = shift;
+    my ($self, $mode) = (shift, shift);
+
     if ($self->{Config}{Debug}) {
-        pop and my $no_wait = 1 if $_[-1] eq 'no_wait';
-        warn @_;
+        my $wait = $mode eq 'no_wait' ? 0 : 1;
+
+        pop; warn @_;
         warn "Press [enter] to continue...\n"
-          and <STDIN> unless $no_wait;
+          and <STDIN> if $wait;
     }
 }
 

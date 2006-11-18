@@ -25,7 +25,7 @@ sub parse_switches {
     version() if $opts{V};
     return { Path             => $ARGV[0],
              Debug            => $opts{d},
-             Exec_Makefile    => $opts{e} 
+             Exec_Makefile    => $opts{e}, 
              Len_Indent       => $opts{l},
              Use_native_order => $opts{n},
              Create_RC        => $opts{rc},
