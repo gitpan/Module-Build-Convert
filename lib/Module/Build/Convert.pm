@@ -14,7 +14,9 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.44';
+our $VERSION = '0.45';
+
+use constant LEADCHAR => '* ';
 
 sub new {
     my ($self, %params) = @_;
@@ -79,7 +81,7 @@ sub convert {
 
         unless ($self->{have_single_dir}) { 
             $" = "\n";
-            $self->_do_verbose(<<TITLE);
+            $self->_do_verbose(<<TITLE) if @{$self->{dirs}};
 Remaining dists:
 ----------------
 @{$self->{dirs}}
@@ -93,9 +95,9 @@ TITLE
 
         unless ($self->{Config}{reinit}) {
             no warnings 'uninitialized';
-            $self->_do_verbose("*** Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
-            next if !$self->_exists;
+            $self->_do_verbose(LEADCHAR."Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
             $self->_create_rcfile if $self->{Config}{Create_RC};
+            next if !$self->_exists_overwrite;
             next if !$self->_makefile_ok;
             $self->_get_data;
         }
@@ -108,13 +110,14 @@ TITLE
     $self->_show_summary if $self->{show_summary};
 }
 
-sub _exists {
+sub _exists_overwrite {
     my $self = shift;
 
     if (-e $self->{Config}{Build_PL}) {
+        print "\n" if $self->{Config}{Verbose};
         print 'A Build.PL exists already';
 
-        if ($self->{Config}{Dont_Overwrite_Auto}) { 
+        if ($self->{Config}{Dont_Overwrite_Auto}) {
             print ".\n";
             print 'Shall I overwrite it? [y/n] ';
             chomp(my $input = <STDIN>);
@@ -144,7 +147,7 @@ sub _create_rcfile {
         my $fh = IO::File->new(">$rcfile") or die "Can't open $rcfile: $!\n";
         print $fh $data;
         $fh->close;
-        print "*** Created $rcfile\n";
+        print LEADCHAR."Created $rcfile\n";
         exit;
     }
 }
@@ -163,15 +166,35 @@ sub _makefile_ok {
             : Cwd::cwd(), "\n";
     }
 
-    unless ($makefile =~ /WriteMakefile\s*\(/s) {
-        warn "*** $self->{Config}{Makefile_PL} does not consist of WriteMakefile()\n\n";
-        push @{$self->{summary}{failed}}, $self->{current_dir};
-        return 0;
+    my $max_failures = 2;
+    my ($failed, @failures);
+
+    if ($makefile =~ /use\s+inc::Module::Install/) {
+        push @failures, "Unsuitable Makefile: Module::Install being used";
+        $failed++;
     }
 
-    if ($makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile}) {
-        warn "*** Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
+    unless ($makefile =~ /WriteMakefile\s*\(/s) {
+        push @failures, "Unsuitable Makefile: doesn't consist of WriteMakefile()";
+        $failed++;
+    }
+
+    if (!$failed && $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile}) {
+        warn LEADCHAR."Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
         $self->{Config}{Exec_Makefile} = 1;
+    }
+
+    if ($failed) {
+        my $i;
+
+        print "\n" if $self->{Config}{Verbose} && @{$self->{dirs}};
+        print map { $i++; "[$i] $_\n" } @failures;
+        warn $self->{current_dir}, ": Failed $failed/$max_failures.\n";
+        print "\n" if $self->{Config}{Verbose} && @{$self->{dirs}};
+
+        push @{$self->{summary}{failed}}, $self->{current_dir};
+
+        return 0;
     }
 
     return 1;
@@ -248,16 +271,17 @@ sub _extract_args {
 
     push @{$self->{summary}{succeeded}}, $self->{current_dir};
 
+    push @{$self->{summary}{$self->{Config}{Exec_Makefile} ? 'method_execute' : 'method_parse'}},
+           $self->{current_dir};
+
     if ($self->{Config}{Exec_Makefile}) {
-        $self->_do_verbose("*** Executing $self->{Config}{Makefile_PL}\n"); 
+        $self->_do_verbose(LEADCHAR."Executing $self->{Config}{Makefile_PL}\n"); 
         $self->_run_makefile;
     } else {
         $self->_parse_makefile;
     }
 
     $self->{Config}{Exec_Makefile} = $self->{Config}{reinit} = 0;
-    push @{$self->{summary}{$self->{Config}{Exec_Makefile} ? 'method_execute' : 'method_parse'}}, 
-           $self->{current_dir};
 }
 
 sub _run_makefile {
@@ -309,7 +333,7 @@ sub _parse_makefile {
                             \s* 
                             ['"]? (\w+) ['"]?
                             \s* => \s* [^ \{ \[ ]
-                            ['"]? ([\$ \@ \% \< \>\\ \/ \- \: \. \w]+.*?) ['"]?
+                            ['"]? ([\$ \@ \% \< \> \( \) \\ \/ \- \: \. \w]+.*?) ['"]?
                             (?: ,? \n? | ,? (\s+ \# \s+ \w+ .*?) \n)
                        /sx;
     my $found_array  = qr/^
@@ -328,7 +352,7 @@ sub _parse_makefile {
                        /sx;
 
     ($makefile, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
-    $self->_debug("*** Entering parse\n\n",'no_wait');
+    $self->_debug(LEADCHAR."Entering parse\n\n", 'no_wait');
 
     while ($makefile) {
         if ($makefile =~ s/$found_string//) {
@@ -452,7 +476,7 @@ DEBUG
             }
         }
     }
-    $self->_debug("*** Leaving parse\n\n",'no_wait');
+    $self->_debug(LEADCHAR."Leaving parse\n\n", 'no_wait');
     %{$self->{make_args}} = %makeargs;
 }
 
@@ -476,11 +500,11 @@ sub _convert {
 
     foreach my $arg (keys %{$self->{make_args}}) {
         if ($self->{disabled}{$arg}) {
-            $self->_do_verbose("*** $arg disabled, skipping\n");
+            $self->_do_verbose(LEADCHAR."$arg disabled, skipping\n");
             next;
         }
         unless ($self->{Data}{table}->{$arg}) {
-            $self->_do_verbose("*** $arg unknown, skipping\n");
+            $self->_do_verbose(LEADCHAR."$arg unknown, skipping\n");
             next;
         }
         if (ref $self->{make_args}{$arg} eq 'HASH') {
@@ -537,7 +561,7 @@ sub _insert_args {
         no warnings 'uninitialized';
 
         if (exists $self->{make_args}{$build{$arg}}) {
-            $self->_do_verbose("*** Overriding default \'$arg => $value\'\n");
+            $self->_do_verbose(LEADCHAR."Overriding default \'$arg => $value\'\n");
             next;
         }
 
@@ -664,7 +688,8 @@ sub _write {
 
     select($selold);
 
-    $self->_do_verbose("\n*** Conversion done\n\n");
+    $self->_do_verbose("\n", LEADCHAR."Conversion done\n");
+    $self->_do_verbose("\n") if !$self->{have_single_dir};
 }
 
 sub _compose_header {
@@ -675,7 +700,7 @@ sub _compose_header {
     my $pragmas = "use strict;\nuse warnings;\n";
 
     if (defined($self->{make_code}{begin})) {
-        $self->_do_verbose("*** Removing ExtUtils::MakeMaker as dependency\n");
+        $self->_do_verbose(LEADCHAR."Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
 
         if ($self->{make_code}{begin} =~ /(?:prompt|Verbose)\s*\(/s) {
@@ -689,7 +714,7 @@ sub _compose_header {
             }
         }
         if ($self->{make_code}{begin} =~ /Module::Build::Compat/) {
-            $self->_do_verbose("*** Removing Module::Build::Compat Note\n");
+            $self->_do_verbose(LEADCHAR."Removing Module::Build::Compat Note\n");
             $self->{make_code}{begin} =~ s/^\#.*Module::Build::Compat.*?\n//s;
         }
         # Removing pragmas quietly here to ensure that they'll be inserted after
@@ -704,7 +729,7 @@ sub _compose_header {
             $self->{make_code}{begin} =~ s/^\n?(.*?;)//s;
             $code_header .= "$1\n";
         }
-        $self->_do_verbose("*** Adding use strict & use warnings pragmas\n");
+        $self->_do_verbose(LEADCHAR."Adding use strict & use warnings pragmas\n");
 
         if ($code_header =~ /(?:use|require)\s+\d\.[\d_]*\s*;/) { 
             $code_header =~ s/([ \t]*(?:use|require)\s+\d\.[\d_]*\s*;\n)(.*)/$1$pragmas$2/;
@@ -732,7 +757,7 @@ sub _write_begin {
     $self->_subst_makecode('begin');
     $self->{Data}{begin} =~ s/(\$INDENT)/$1/eego;
     $self->_do_verbose("\n", File::Basename::basename($self->{Config}{Build_PL}), " written:\n", 2);
-    $self->_do_verbose('=' x ($self->{Config}{Build_PL_Length} + 9), "\n", 2);
+    $self->_do_verbose('-' x ($self->{Config}{Build_PL_Length} + 9), "\n", 2);
     $self->_do_verbose($self->{Data}{begin}, 2);
 
     print $self->{Data}{begin};
@@ -851,7 +876,7 @@ sub _add_to_manifest {
         print $fh sort @manifest;
         $fh->close;
 
-        $self->_do_verbose("*** Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
+        $self->_do_verbose(LEADCHAR."Added to $self->{Config}{MANIFEST}: $self->{Config}{Build_PL}\n");
     }
 }
 
@@ -886,20 +911,18 @@ sub _do_verbose {
 }
 
 sub _debug {
-    my ($self, $mode) = (shift, shift);
-
+    my $self = shift;
     if ($self->{Config}{Debug}) {
-        my $wait = $mode eq 'no_wait' ? 0 : 1;
-
-        pop; warn @_;
-        warn "Press [enter] to continue...\n"
-          and <STDIN> if $wait;
+        pop and my $no_wait = 1 if $_[-1] eq 'no_wait';
+        warn @_;
+        warn "Press [enter] to continue...\n" 
+            and <STDIN> unless $no_wait;
     }
 }
 
 1;
 __DATA__
- 
+
 # argument conversion 
 -
 NAME                  module_name

@@ -26,7 +26,7 @@ my %makeargs = (NAME           => 'SCALAR',
                 EXTRA_META     => 'SCALAR',
                 SIGN           => 'SCALAR',
                 LICENSE        => 'SCALAR',
-                'clean.FILES'   => 'ARRAY');
+                'clean.FILES'  => 'ARRAY');
 
 my %resolve = (SCALAR => '',
                ARRAY  => [],

@@ -1,5 +1,16 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.45 Thu Jan 18 09:58:17 CET 2007
+
+ - The debugging mode has been accidentally borked. Restored
+   _debug() method from 0.41 which doesn't emit any warnings.
+
+ - Fixed relevant code to _show_summary() to correctly output
+   the method chosen (parse/execute).
+
+ - Enhanced string match regular expression in _parse_makefile()
+   to allow for embedded parentheses.
+
 0.44 Sat Nov 18 20:01:50 CET 2006
 
  - Added whitespace where necessary.
