@@ -1,5 +1,10 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.47 Sun Jan 21 17:25:58 CET 2007
+
+ - Accidentally used bare print instead of _do_verbose()
+   within _show_summary().
+
 0.46 Sun Jan 21 16:59:04 CET 2007
 
  - Replaced calls to warn within _makefile_ok() with print.

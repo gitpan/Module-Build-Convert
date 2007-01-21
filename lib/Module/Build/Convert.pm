@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.46';
+our $VERSION = '0.47';
 
 use constant LEADCHAR => '* ';
 
@@ -895,9 +895,9 @@ sub _show_summary {
 
     foreach my $item (@summary) {
         next unless defined(@{$self->{summary}{$item->[1]}});
-        print "$item->[0]\n";
-        print '-' x length($item->[0]), "\n";
-        print "@{$self->{summary}{$item->[1]}}\n\n";
+        $self->_do_verbose("$item->[0]\n");
+        $self->_do_verbose('-' x length($item->[0]), "\n");
+        $self->_do_verbose("@{$self->{summary}{$item->[1]}}\n\n");
     }
 }
 
@@ -914,11 +914,12 @@ sub _do_verbose {
 
 sub _debug {
     my $self = shift;
+    
     if ($self->{Config}{Debug}) {
         pop and my $no_wait = 1 if $_[-1] eq 'no_wait';
         warn @_;
         warn "Press [enter] to continue...\n" 
-            and <STDIN> unless $no_wait;
+          and <STDIN> unless $no_wait;
     }
 }
 
