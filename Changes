@@ -1,5 +1,13 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.46 Sun Jan 21 16:59:04 CET 2007
+
+ - Replaced calls to warn within _makefile_ok() with print.
+
+ - Merged redundant code in _show_summary() to a few simpler
+   statements; furthermore, replaced multiple print statements
+   with string concatenation.
+
 0.45 Thu Jan 18 09:58:17 CET 2007
 
  - The debugging mode has been accidentally borked. Restored

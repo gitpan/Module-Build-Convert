@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.45';
+our $VERSION = '0.46';
 
 use constant LEADCHAR => '* ';
 
@@ -180,17 +180,19 @@ sub _makefile_ok {
     }
 
     if (!$failed && $makefile =~ /WriteMakefile\(\s*%\w+.*\s*\)/s && !$self->{Config}{Exec_Makefile}) {
-        warn LEADCHAR."Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
+        print LEADCHAR."Indirect arguments to WriteMakefile() via hash detected, setting executing mode\n";
         $self->{Config}{Exec_Makefile} = 1;
     }
 
     if ($failed) {
-        my $i;
+        my ($i, $output);
 
-        print "\n" if $self->{Config}{Verbose} && @{$self->{dirs}};
-        print map { $i++; "[$i] $_\n" } @failures;
-        warn $self->{current_dir}, ": Failed $failed/$max_failures.\n";
-        print "\n" if $self->{Config}{Verbose} && @{$self->{dirs}};
+        $output .= "\n" if $self->{Config}{Verbose} && @{$self->{dirs}};
+        $output .= join '', map { $i++; "[$i] $_\n" } @failures;
+        $output .= "$self->{current_dir}: Failed $failed/$max_failures.\n";
+        $output .= "\n" if $self->{Config}{Verbose} && @{$self->{dirs}};
+
+        print $output;
 
         push @{$self->{summary}{failed}}, $self->{current_dir};
 
@@ -883,20 +885,20 @@ sub _add_to_manifest {
 sub _show_summary {
     my $self = shift;
 
-    $self->_do_verbose("\nSucceeded:\n"    . '-' x 10 . "\n@{$self->{summary}{succeeded}}\n\n")
-      if defined @{$self->{summary}{succeeded}};
+    my @summary = (
+        [ 'Succeeded',       'succeeded'      ],
+        [ 'Skipped',         'skipped'        ],
+        [ 'Failed',          'failed'         ],
+        [ 'Method: parse',   'method_parse'   ],
+        [ 'Method: execute', 'method_execute' ],
+    );
 
-    $self->_do_verbose("Skipped:\n"        . '-' x  8 . "\n@{$self->{summary}{skipped}}\n\n")
-      if defined @{$self->{summary}{skipped}};
-
-    $self->_do_verbose("Failed:\n"         . '-' x  7 . "\n@{$self->{summary}{failed}}\n\n")
-      if defined @{$self->{summary}{failed}};
-
-    $self->_do_verbose("Method: parse\n"   . '-' x 13 . "\n@{$self->{summary}{method_parse}}\n\n")
-      if defined @{$self->{summary}{method_parse}};
-
-    $self->_do_verbose("Method: execute\n" . '-' x 15 . "\n@{$self->{summary}{method_execute}}\n\n")
-      if defined @{$self->{summary}{method_execute}};
+    foreach my $item (@summary) {
+        next unless defined(@{$self->{summary}{$item->[1]}});
+        print "$item->[0]\n";
+        print '-' x length($item->[0]), "\n";
+        print "@{$self->{summary}{$item->[1]}}\n\n";
+    }
 }
 
 sub _do_verbose {
