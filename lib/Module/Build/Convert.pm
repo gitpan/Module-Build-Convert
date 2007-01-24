@@ -14,7 +14,7 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 
-our $VERSION = '0.47';
+our $VERSION = '0.47_01';
 
 use constant LEADCHAR => '* ';
 
@@ -48,8 +48,8 @@ sub convert {
 
     unless ($self->{Config}{reinit} || defined @{$self->{dirs}}) {
         if ($self->{Config}{Path}) {
-            my ($basename, $dirname) = File::Basename::fileparse($self->{Config}{Path});
             if (-f $self->{Config}{Path}) {
+                my ($basename, $dirname)     = File::Basename::fileparse($self->{Config}{Path});
                 $self->{Config}{Makefile_PL} = $basename;
                 $self->{Config}{Path}        = $dirname;
             }
@@ -67,6 +67,7 @@ sub convert {
             $self->{have_single_dir} = 1;
         }
     }
+
     my $Makefile_PL = File::Basename::basename($self->{Config}{Makefile_PL});
     my $Build_PL    = File::Basename::basename($self->{Config}{Build_PL});
     my $MANIFEST    = File::Basename::basename($self->{Config}{MANIFEST});
@@ -80,7 +81,7 @@ sub convert {
         $self->{current_dir} = $dir;
 
         unless ($self->{have_single_dir}) { 
-            $" = "\n";
+            local $" = "\n";
             $self->_do_verbose(<<TITLE) if @{$self->{dirs}};
 Remaining dists:
 ----------------
@@ -88,6 +89,7 @@ Remaining dists:
 
 TITLE
         }
+
         $dir = File::Spec->catfile($self->{Config}{Path}, $dir) if !$self->{have_single_dir};
         $self->{Config}{Makefile_PL} = File::Spec->catfile($dir, $Makefile_PL);
         $self->{Config}{Build_PL}    = File::Spec->catfile($dir, $Build_PL);
@@ -95,18 +97,22 @@ TITLE
 
         unless ($self->{Config}{reinit}) {
             no warnings 'uninitialized';
+
             $self->_do_verbose(LEADCHAR."Converting $self->{Config}{Makefile_PL} -> $self->{Config}{Build_PL}\n");
+
             $self->_create_rcfile if $self->{Config}{Create_RC};
             next if !$self->_exists_overwrite;
             next if !$self->_makefile_ok;
             $self->_get_data;
         }
+
         $self->_extract_args;
         $self->_convert;
         $self->_dump;
         $self->_write;
         $self->_add_to_manifest if -e $self->{Config}{MANIFEST};
     }
+
     $self->_show_summary if $self->{show_summary};
 }
 
@@ -114,19 +120,24 @@ sub _exists_overwrite {
     my $self = shift;
 
     if (-e $self->{Config}{Build_PL}) {
+        print "$self->{current_dir}:\n"
+          if $self->{show_summary} && !$self->{Config}{Verbose};
+
         print "\n" if $self->{Config}{Verbose};
         print 'A Build.PL exists already';
 
         if ($self->{Config}{Dont_Overwrite_Auto}) {
-            print ".\n";
-            print 'Shall I overwrite it? [y/n] ';
+            print ".\nShall I overwrite it? [y/n] ";
             chomp(my $input = <STDIN>);
 
-            unless ($input =~ /y/i) {
+            if ($input !~ /^y$/i) {
+                print "Skipped...\n";
+                print "\n" if $self->{Config}{Verbose};
                 push @{$self->{summary}{skipped}}, $self->{current_dir};
                 return 0;
+            } else {
+                print "\n" if $self->{Config}{Verbose};
             }
-            print "\n" if $self->{Config}{Verbose};
         } else {
             print ", continuing...\n";
         }
@@ -144,7 +155,7 @@ sub _create_rcfile {
         die "$rcfile exists\n";
     } else {
         my $data = $self->_parse_data('create_rc');
-        my $fh = IO::File->new(">$rcfile") or die "Can't open $rcfile: $!\n";
+        my $fh = IO::File->new($rcfile, '>') or die "Can't open $rcfile: $!\n";
         print $fh $data;
         $fh->close;
         print LEADCHAR."Created $rcfile\n";
@@ -239,7 +250,7 @@ sub _parse_data {
     } else {
         local $/ = '__END__';
         $data = <DATA>;
-        chomp($data);
+        chomp $data;
     }
 
     unless ($create_rc) {
@@ -251,8 +262,8 @@ sub _parse_data {
     unless ($create_rc) {
         # superfluosity
         shift @data_parsed;
-        chomp($data_parsed[-1]);
- 
+        chomp $data_parsed[-1];
+
         foreach my $line (split /\n/, $data_parsed[0]) {
             next unless $line;
 
@@ -308,7 +319,7 @@ sub _save_globals {
     $makefile =~ s/.*WriteMakefile\(\s*?(.*?)\);.*/$1/s;
 
     while ($makefile =~ s/\$(\w+)//) {
-        push @vars, $1 if defined(${$1});
+        push @vars, $1 if defined ${$1};
     }
 
     no strict 'refs';
@@ -478,6 +489,7 @@ DEBUG
             }
         }
     }
+
     $self->_debug(LEADCHAR."Leaving parse\n\n", 'no_wait');
     %{$self->{make_args}} = %makeargs;
 }
@@ -498,6 +510,7 @@ sub _read_makefile {
 
 sub _convert {
     my $self = shift;
+
     $self->_insert_args;
 
     foreach my $arg (keys %{$self->{make_args}}) {
@@ -550,6 +563,7 @@ sub _convert {
             warn "$arg - unknown type of argument\n";
         }
     }
+
     $self->_sort_args if @{$self->{Data}{sort_order}};
 }
 
@@ -573,6 +587,7 @@ sub _insert_args {
 
         push @insert_args, { $arg => $value };
     }
+
     @{$self->{build_args}} = @insert_args;
 }
 
@@ -677,7 +692,7 @@ sub _write {
     $self->{INDENT} = ' ' x $self->{Config}{Len_Indent};
 
     no warnings 'once';
-    my $fh = IO::File->new(">$self->{Config}{Build_PL}") 
+    my $fh = IO::File->new($self->{Config}{Build_PL}, '>') 
       or die "Can't open $self->{Config}{Build_PL}: $!\n";
 
     my $selold = select($fh);
@@ -701,7 +716,7 @@ sub _compose_header {
     my $note = '# Note: this file has been initially generated by ' . __PACKAGE__ . " $VERSION";
     my $pragmas = "use strict;\nuse warnings;\n";
 
-    if (defined($self->{make_code}{begin})) {
+    if (defined $self->{make_code}{begin}) {
         $self->_do_verbose(LEADCHAR."Removing ExtUtils::MakeMaker as dependency\n");
         $self->{make_code}{begin} =~ s/[ \t]*(?:use|require)\s+ExtUtils::MakeMaker\s*;//;
 
@@ -725,7 +740,7 @@ sub _compose_header {
         while ($self->{make_code}{begin} =~ s/^(\#\!?.*?\n)//) {
             $comments_header .= $1;
         }
-        chomp($comments_header);
+        chomp $comments_header;
 
         while ($self->{make_code}{begin} =~ /(?:use|require)\s+.*?;/) {
             $self->{make_code}{begin} =~ s/^\n?(.*?;)//s;
@@ -738,10 +753,10 @@ sub _compose_header {
         } else {
             $code_header = $pragmas . $code_header;
         }
-        chomp($code_header);
+        chomp $code_header;
 
         1 while $self->{make_code}{begin} =~ s/^\n//;
-        chomp($self->{make_code}{begin}) while $self->{make_code}{begin} =~ /\n$/s;
+        chomp $self->{make_code}{begin} while $self->{make_code}{begin} =~ /\n$/s;
     }
 
     $self->{Data}{begin} = $comments_header || $code_header
@@ -791,7 +806,7 @@ sub _write_args {
 
             foreach (my $i = 0; $i < @lines; $i++) {
                 my $line = $lines[$i];
-                chomp($line);
+                chomp $line;
                 # Remove additional whitespace
                 $line =~ s/^\s{$shorten}(.*)$/$1/o;
 
@@ -811,7 +826,7 @@ sub _write_args {
                 print $output;
             }
         } else { # Scalar output
-            chomp($chunk);
+            chomp $chunk;
             # Remove redundant parentheses
             $chunk =~ s/^\{\s+(.*?)\s+\}$/$1/s;
 
@@ -819,7 +834,7 @@ sub _write_args {
             ($arg) = $chunk =~ /^\s*(\w+)/;
 
             my $output = "$self->{INDENT}$chunk,";
-            $output .= $self->{make_comments}{$arg} if defined($self->{make_comments}{$arg});
+            $output .= $self->{make_comments}{$arg} if defined $self->{make_comments}{$arg};
 
             $self->_do_verbose("$output\n", 2);
             print "$output\n";
@@ -863,17 +878,17 @@ sub _subst_makecode {
 sub _add_to_manifest {
     my $self = shift;
 
-    my $fh = IO::File->new("<$self->{Config}{MANIFEST}") 
+    my $fh = IO::File->new($self->{Config}{MANIFEST}, '<')
       or die "Can't open $self->{Config}{MANIFEST}: $!\n";
     my @manifest = <$fh>;
     $fh->close;
 
     my $build_pl = File::Basename::basename($self->{Config}{Build_PL});
 
-    unless (grep { $_ =~ /^$build_pl\s+$/o } @manifest) {
+    unless (grep { /^$build_pl\s+$/o } @manifest) {
         unshift @manifest, "$build_pl\n";
 
-        $fh = IO::File->new(">$self->{Config}{MANIFEST}")
+        $fh = IO::File->new($self->{Config}{MANIFEST}, '>')
           or die "Can't open $self->{Config}{MANIFEST}: $!\n";
         print $fh sort @manifest;
         $fh->close;
@@ -893,8 +908,10 @@ sub _show_summary {
         [ 'Method: execute', 'method_execute' ],
     );
 
+    local $" = "\n";
+
     foreach my $item (@summary) {
-        next unless defined(@{$self->{summary}{$item->[1]}});
+        next unless defined @{$self->{summary}{$item->[1]}};
         $self->_do_verbose("$item->[0]\n");
         $self->_do_verbose('-' x length($item->[0]), "\n");
         $self->_do_verbose("@{$self->{summary}{$item->[1]}}\n\n");
@@ -914,7 +931,7 @@ sub _do_verbose {
 
 sub _debug {
     my $self = shift;
-    
+
     if ($self->{Config}{Debug}) {
         pop and my $no_wait = 1 if $_[-1] eq 'no_wait';
         warn @_;
@@ -995,7 +1012,7 @@ $INDENT(
 # end code 
 -
 $INDENT);
-  
+
 $build->create_build_script;
 
 $MAKECODE

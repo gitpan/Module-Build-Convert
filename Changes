@@ -1,5 +1,13 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.47_01 Wed Jan 24 22:48:24 CET 2007
+
+ - Tiny refactoring of convert().
+
+ - IO::File->new invocations have now a separate mode argument.
+
+ - _exists_overwrite()'s visual output has been improved.
+
 0.47 Sun Jan 21 17:25:58 CET 2007
 
  - Accidentally used bare print instead of _do_verbose()
