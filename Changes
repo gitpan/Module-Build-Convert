@@ -1,6 +1,27 @@
 Revision history for Perl extension Module::Build::Convert.
 
-0.47_05
+0.47_06 Sat Mar  3 14:43:00 CET 2007
+
+ - A greedy match was the cause that the ampersand (&) wasn't removed
+   from &WriteMakefile(). The regular expression has been adjusted.
+
+ - Instead of deleting all single- & doublequotes in $value within 
+   _parse_process_string(), now only leading and trailing quotes are 
+   being removed.
+
+ - Comments to be removed from the parsing string are now being
+   properly escaped. The substitution in _parse_process_code() 
+   was previously broken.
+
+ - Integrated negative zero-width look-ahead assertion in the regular
+   expression matching strings within _parse_makefile().
+
+ - MakeMaker's MY:: subs are now being removed. The strings are
+   fetched by _extract_sub().
+
+ - Included the documentation of the -c switch in make2build.
+
+0.47_05 Sun Feb 18 02:37:05 CET 2007
 
  - Comments "attached" to an argument and loose comments are properly
    processed.
