@@ -16,7 +16,7 @@ use IO::File ();
 use IO::Prompt ();
 use Text::Balanced ();
 
-our $VERSION = '0.47_06';
+our $VERSION = '0.47_07';
 
 use constant LEADCHAR => '* ';
 
@@ -802,13 +802,18 @@ sub _sort_args {
     if ($self->{Config}{Use_Native_Order}) {
         no warnings 'uninitialized';
 
+        # Mapping an incremental value to the arguments (keys) in the
+        # order they appear.
         for (my ($i,$s) = 0; $s < @{$self->{make_args_arr}}; $s++) {
+            # Skipping values
             next unless $s % 2 == 0;
+            # Populating table with according M::B arguments and counter
             $native_sortorder{$self->{Data}{table}{$self->{make_args_arr}[$s]}} = $i
               if exists $self->{Data}{table}{$self->{make_args_arr}[$s]};
             $i++;
         }
     }
+
     my %sortorder;
     {
         my %have_args = map { keys %$_ => 1 } @{$self->{build_args}};
@@ -819,15 +824,18 @@ sub _sort_args {
             my %slot;
 
             foreach my $arg (grep $have_args{$_}, @{$self->{Data}{sort_order}}) {
+                # Building sorting table for existing MakeMaker arguments
                 if ($native_sortorder{$arg}) {
                     $sortorder{$arg} = $native_sortorder{$arg};
                     $slot{$native_sortorder{$arg}} = 1;
+                # Inject default arguments at free indexes
                 } else {
                     $i++ while $slot{$i};
                     $sortorder{$arg} = $i++;
                 }
             }
 
+            # Sorting sort table ascending
             my @args = sort { $sortorder{$a} <=> $sortorder{$b} } keys %sortorder;
             $i = 0; %sortorder = map { $_ => $i++ } @args;
 
@@ -837,6 +845,7 @@ sub _sort_args {
             } grep $have_args{$_}, @{$self->{Data}{sort_order}};
         }
     }
+
     my ($is_sorted, @unsorted);
     do {
 
@@ -858,6 +867,7 @@ sub _sort_args {
                   push @{$self->{build_args}},
                     splice(@{$self->{build_args}}, $sortorder{$arg}, 1,
                       splice(@{$self->{build_args}}, $i, 1));
+
                   last SORT;
               }
           }
@@ -875,7 +885,6 @@ sub _dump {
     $Data::Dumper::Terse     = 1;
 
     my $d = Data::Dumper->new(\@{$self->{build_args}});
-
     $self->{buildargs_dumped} = [ $d->Dump ];
 }
 
@@ -1061,7 +1070,6 @@ sub _write_args {
 
             # Remove redundant parentheses
             $chunk =~ s/^\{.*?\n(.*(?{ $regex ? '\}' : '\]' }))\s+\}\s+$/$1/os;
-            Carp::croak $@ if $@;
 
             # One element per each line
             my @lines;
@@ -1082,29 +1090,47 @@ sub _write_args {
                 # Quote sub hash keys
                 $line =~ s/^(\s+)([\w:]+)/$1'$2'/ if $line =~ /^\s+/;
 
-                # Add comma where appropriate (version numbers, parentheses)
-                $line .= ',' if $line =~ /[\d+\}\]]$/;
+                # Add comma where appropriate (version numbers, parentheses, brackets)
+                $line .= ',' if $line =~ /[\d+ \} \]] $/x;
 
-                $line =~ s/'(\d|\$\w+)'/$1/g;
+                # (De)quotify numbers, variables & code bits
+                $line =~ s/' \\? ( \d | [\\ \/ \( \) \$ \@ \%]+ \w+) '/$1/gx;
+                $self->_quotify(\$line) if $line =~ /\(/;
 
-                my $output = "$self->{INDENT}$line";
-                $output .= ($i == $#lines && defined($self->{make_comments}{$arg}))
-                  ? "$self->{make_comments}{$arg}\n" : "\n";
+                # Add comma to dequotified key/value pairs
+                my $comma   = ',' if $line =~ /['"](?!,)$/ && $#lines - $i != 1;
+                   $comma ||= '';
 
+                # Construct line output
+                my $output = "$self->{INDENT}$line$comma";
+
+                # Add adhering comments at end of array/hash
+                $output .= ($i == $#lines && defined $self->{make_comments}{$arg})
+                  ? "$self->{make_comments}{$arg}\n"
+                  : "\n";
+
+                # Output line
                 $self->_do_verbose($output, 2);
                 print $output;
             }
-        } else { # Scalar output
+        # String output
+        } else {
             chomp $chunk;
             # Remove redundant parentheses
-            $chunk =~ s/^\{\s+(.*?)\s+\}$/$1/s;
+            $chunk =~ s/^\{\s+(.*?)\s+\}$/$1/sx;
 
-            $chunk =~ s/'(\d|\$\w+)'/$1/g;
+            # (De)quotify numbers, variables & code bits
+            $chunk =~ s/' \\? ( \d | [\\ \/ \( \) \$ \@ \%]+ \w+ ) '/$1/gx;
+            $self->_quotify(\$chunk) if $chunk =~ /\(/;
+
+            # Extract argument (key)
             ($arg) = $chunk =~ /^\s*(\w+)/;
 
+            # Construct line output & add adhering comment
             my $output = "$self->{INDENT}$chunk,";
             $output .= $self->{make_comments}{$arg} if defined $self->{make_comments}{$arg};
 
+            # Output key/value pair
             $self->_do_verbose("$output\n", 2);
             print "$output\n";
         }
@@ -1131,6 +1157,20 @@ sub _write_args {
                 print "$self->{INDENT}$arg\n";
             }
         }
+    }
+}
+
+sub _quotify {
+    my ($self, $string) = @_;
+
+    # Removing single-quotes and escaping backslashes
+    $$string =~ s/(=>\s+?)'/$1/;
+    $$string =~ s/',?$//;
+    $$string =~ s/\\'/'/g; 
+
+    # Double-quoting $(NAME) variables
+    if ($$string =~ /\$\(/) {
+        $$string =~ s/(=>\s+?)(.*)/$1"$2"/;
     }
 }
 
@@ -1325,7 +1365,7 @@ Module::Build::Convert - Makefile.PL to Build.PL converter
 
 C<ExtUtils::MakeMaker> has been a de-facto standard for the common distribution of Perl
 modules; C<Module::Build> is expected to supersede C<ExtUtils::MakeMaker> in some time
-(part of the Perl core as of 5.10?)
+(part of the Perl core as of 5.9.4).
 
 The transition takes place slowly, as the converting process manually achieved
 is yet an uncommon practice. The Module::Build::Convert F<Makefile.PL> parser is
