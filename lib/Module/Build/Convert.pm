@@ -14,9 +14,10 @@ use File::Slurp ();
 use File::Spec ();
 use IO::File ();
 use IO::Prompt ();
+use PPI ();
 use Text::Balanced ();
 
-our $VERSION = '0.48';
+our $VERSION = '0.48_01';
 
 use constant LEADCHAR => '* ';
 
@@ -31,6 +32,7 @@ sub new {
                                   RC                  => $params{RC}                  || '.make2buildrc',
                                   Dont_Overwrite_Auto => $params{Dont_Overwrite_Auto} || 1,
                                   Create_RC           => $params{Create_RC}           || 0,
+                                  Parse_PPI           => $params{Parse_PPI}           || 0,
                                   Exec_Makefile       => $params{Exec_Makefile}       || 0,
                                   Verbose             => $params{Verbose}             || 0,
                                   Debug               => $params{Debug}               || 0,
@@ -41,6 +43,8 @@ sub new {
                                   DD_Sortkeys         => $params{DD_Sortkeys}         || 1 }}, $class;
 
     $obj->{Config}{RC}              = File::Spec->catfile(File::HomeDir::home(), $obj->{Config}{RC});
+
+    # Save length of filename for creating underlined title in output
     $obj->{Config}{Build_PL_Length} = length($obj->{Config}{Build_PL});
 
     return $obj;
@@ -299,7 +303,11 @@ sub _extract_args {
         $self->_do_verbose(LEADCHAR."Executing $self->{Config}{Makefile_PL}\n");
         $self->_run_makefile;
     } else {
-        $self->_parse_makefile;
+        if ($self->{Config}{Parse_PPI}) {
+            $self->_parse_makefile_ppi;
+        } else {
+            $self->_parse_makefile;
+        }
     }
 }
 
@@ -354,6 +362,216 @@ sub _restore_globals {
         ${__PACKAGE__.'::'.$var} = $value;
     }
     undef %{__PACKAGE__.'::globals'};
+}
+
+sub _parse_makefile_ppi {
+    my $self = shift;
+
+    $self->_parse_init;
+
+    ($self->{parse}{makefile}, $self->{make_code}{begin}, $self->{make_code}{end}) = $self->_read_makefile;
+
+    $self->_debug(LEADCHAR."Entering parse\n\n", 'no_wait');
+
+    my $doc = PPI::Document->new(\$self->{parse}{makefile});
+
+    my @elements = $doc->children;
+    my @tokens   = $elements[0]->tokens;
+
+    $self->_scrub_ternary(\@tokens);
+
+    my ($keyword, %have, @items, %seen, $structure_ended, $type);
+
+    for (my $i = 0; $i < @tokens; $i++) {
+        my %token = (curr => sub {
+                                      my $c = $i; 
+                                      while (!$tokens[$c]->significant) { $c++ }
+                                      $i = $c;
+                                      return $tokens[$c];
+                                 },
+
+                     next => sub {
+                                      my $iter      = $_[0] ? $_[0] : 1;
+                                      my ($c, $pos) = ($i + 1, 0);
+
+                                      while ($c < @tokens) {
+                                          $pos++ if $tokens[$c]->significant;
+                                          last if $pos == $iter;
+                                          $c++;
+                                      }
+
+                                      return $tokens[$c];
+                                 },
+
+                     last => sub {
+                                      my $iter      = $_[0] ? $_[0] : 1;
+                                      my ($c, $pos) = ($i, 0);
+
+                                      $c-- if $c >= 1;
+
+                                      while ($c > 0) { 
+                                          $pos++ if $tokens[$c]->significant;
+                                          last if $pos == $iter;
+                                          $c--;
+                                      }
+
+                                      return $tokens[$c];
+                                 });
+
+        my %finalize = (string => sub { $self->{parse}{makeargs}{$keyword} = join '', @items },
+                        array  => sub { $self->{parse}{makeargs}{$keyword} = [ @items      ] },
+                        hash   => sub { $self->{parse}{makeargs}{$keyword} = { @items      } });
+
+        my $token = $have{code} ? $tokens[$i] : $token{curr}->();
+
+        if ($self->_is_quotelike($token) && !$have{structure} && !$have{code} && $token{last}->(1) ne '=>') {
+            $keyword = $token;
+            $type    = 'string';
+            next;
+        } elsif ($token eq '=>' && !$have{structure}) {
+            next;
+        }
+
+        next if $structure_ended && $token eq ',';
+        $structure_ended = 0;
+
+        if ($token->isa('PPI::Token::Structure')) {
+            if ($token =~ /[\Q[{\E]/) {
+                $have{structure}++;
+
+                my %assoc = ('[' => 'array',
+                             '{' => 'hash');
+
+                $type = $assoc{$token};
+            } elsif ($token =~ /[\Q]}\E]/) {
+                $have{structure}--;
+                $structure_ended = 1 unless $have{structure};
+            }
+        }
+
+        $structure_ended = 1 if !$have{structure} && $token{next}->() eq ',' && !$have{code};
+        $have{code}      = 1 if  $token->isa('PPI::Token::Word') && $token{next}->(1) ne '=>';
+
+        if ($have{code}) {
+            my $followed_by_arrow = sub { $token eq ',' && $token{next}->(2) eq '=>' };
+
+            my %finalize = (seen   => sub { $structure_ended = 1; $seen{code} = 1; $have{code} = 0 },
+                            unseen => sub { $structure_ended = 1; $seen{code} = 0; $have{code} = 0 });
+
+            if ($followed_by_arrow->()) {
+                ($token{next}->(1) =~ /^[\Q}]\E]$/ || !$have{structure})
+                  ? $finalize{seen}->()
+                  : $have{structure}
+                    ? $finalize{unseen}->()
+                    : ();
+            } elsif (($token eq ',' && $token{next}->(1) eq ']') 
+                   || $token{next}->(1) eq ']') {
+                $finalize{unseen}->();
+            }
+        }
+
+        unless ($token =~ /^[\Q[]{}\E]$/) {
+            next if $token eq '=>';
+            next if $token eq ',' && !$have{code} && !$seen{code};
+
+            if (defined $keyword) {
+                $keyword =~ s/['"]//g;
+                $token   =~ s/['"]//g unless $token =~ /^['"]\s+['"]$/ || $have{code};
+
+                if (!$have{code} && !$structure_ended) {
+                    push @items, $token;
+                } else {
+                    if ((@items % 2 == 1 && $type ne 'array') || !@items) {
+                        push @items, $token;
+                    } else {
+                        $items[-1] .= $token unless $structure_ended
+                                                 && $type eq 'string';
+                    }
+                }
+            }
+        }
+
+        if ($structure_ended) {
+            # Obscure construct. Needed to 'serialize' the PPI tokens.
+            @items = map { /(.*)/; $1 } @items;
+
+            # Sanitize code elements within a hash.
+            $items[-1] =~ s/[,\s]+$// if $type eq 'hash' && defined $items[-1];
+
+            $finalize{$type}->();
+
+            undef $keyword;
+
+            $have{code} = 0;
+            @items      = ();
+            %seen       = ();
+
+            $type = 'string';
+        }
+    }
+
+    $self->_debug(LEADCHAR."Leaving parse\n\n", 'no_wait');
+
+    %{$self->{make_args}{args}} = %{$self->{parse}{makeargs}};
+}
+
+sub _is_quotelike {
+    my ($self, $token) = @_;
+
+    return ($token->isa('PPI::Token::Double')
+         or $token->isa('PPI::Token::Quote::Interpolate')
+         or $token->isa('PPI::Token::Quote::Literal')
+         or $token->isa('PPI::Token::Quote::Single')
+         or $token->isa('PPI::Token::Word')) ? 1 : 0;
+}
+
+sub _scrub_ternary {
+    my ($self, $tokens) = @_;
+
+    my (%last, %have, %occurences);
+
+    for (my $i = 0; $i < @$tokens; $i++) {
+        my $token = $tokens->[$i];
+
+        $last{comma} = $i if $token eq ',' && !$have{'?'};
+
+        unless ($have{ternary}) {
+            $occurences{subsequent}{'('}++ if $token eq '(';
+            $occurences{subsequent}{')'}++ if $token eq ')';
+        }
+
+        $have{'?'} = 1 if $token eq '?';
+        $have{':'} = 1 if $token eq ':';
+
+        $have{ternary} = 1 if $have{'?'} && $have{':'};
+
+        if ($have{ternary}) {
+            $occurences{'('} ||= 0;
+            $occurences{')'} ||= 0;
+
+            $occurences{'('} += $occurences{subsequent}{'('};
+            $occurences{')'} += $occurences{subsequent}{')'};
+
+            $occurences{subsequent}{'('} = 0;
+            $occurences{subsequent}{')'} = 0;
+
+            $occurences{'('}++ if $token eq '(';
+            $occurences{')'}++ if $token eq ')';
+
+            $have{parentheses} = 1 if $occurences{'('} || $occurences{')'};
+            $have{comma}       = 1 if $token eq ',';
+
+            if ($occurences{'('} == $occurences{')'} && $have{parentheses} && $have{comma}) {
+                $i++ while $tokens->[$i] ne ',';
+                splice(@$tokens, $last{comma}, $i-$last{comma});
+
+                @have{qw(? : comma parentheses ternary)} = (0,0,0,0,0);
+                @occurences{qw{( )}}                     = (0,0);
+
+                $i = 0; redo;
+            }
+        }
+    }
 }
 
 sub _parse_makefile {
@@ -463,6 +681,7 @@ sub _parse_process_string {
 sub _parse_process_array {
     my ($self, $arg, $values, $comment) = @_;
 
+    $values  ||= '';
     $comment ||= '';
 
     $self->{parse}{makeargs}{$arg} = [ map { tr/['",]//d; $_ } split /,\s*/, $values ];
@@ -477,6 +696,7 @@ sub _parse_process_array {
 sub _parse_process_hash {
     my ($self, $arg, $values, $comment) = @_;
 
+    $values  ||= '';
     $comment ||= '';
 
     my @values_debug = split /,\s*/, $values;
@@ -1410,6 +1630,11 @@ Default: 1
 =item Create_RC
 
 Create a RC file in the homedir of the current user.
+Default: 0
+
+=item Parse_PPI
+
+Parse the Makefile.PL in the L<PPI> Parser mode.
 Default: 0
 
 =item Exec_Makefile

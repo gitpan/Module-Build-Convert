@@ -1,5 +1,11 @@
 Revision history for Perl extension Module::Build::Convert.
 
+0.48_01 Wed Apr  4 23:22:04 CEST 2007
+
+ - Took an approach at implementing a PPI-based parser;
+   the drawbacks are, that comments aren't currently parsed
+   and the debugging mode is still unavailable.
+
 0.48 Mon Mar 12 10:08:45 CET 2007
 
  - Merged development version to stable.
