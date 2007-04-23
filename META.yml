@@ -1,6 +1,6 @@
 ---
 name: Module-Build-Convert
-version: 0.48_01
+version: 0.48_02
 author:
   - 'Steven Schubiger <schubiger@cpan.org>'
 abstract: Makefile.PL to Build.PL converter
@@ -31,6 +31,6 @@ meta-spec:
 provides:
   Module::Build::Convert:
     file: lib/Module/Build/Convert.pm
-    version: 0.48_01
+    version: 0.48_02
 resources:
   license: http://dev.perl.org/licenses/
